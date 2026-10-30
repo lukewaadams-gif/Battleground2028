@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Battleground 2028</title>
+  <script src="https://cjrtnc.leaningtech.com/4.3/loader.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #060a13; color: #e7edf7;
+                 font-family: Georgia, serif; overflow: hidden; }
+    #game { position: absolute; inset: 0; }
+    #loading { position: absolute; inset: 0; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; gap: 12px; z-index: 1;
+               background: #060a13; pointer-events: none; transition: opacity .6s; }
+    #loading h1 { margin: 0; font-size: 44px; letter-spacing: 2px; }
+    #loading p { margin: 0; color: #93a4bf; font-family: sans-serif; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="loading">
+    <h1>BATTLEGROUND 2028</h1>
+    <p>Loading the campaign... the first visit can take a minute.</p>
+  </div>
+  <script type="module">
+    // Saves go to /files/, which the browser keeps between visits.
+    await cheerpjInit({ javaProperties: ["user.home=/files"] });
+    cheerpjCreateDisplay(-1, -1, document.getElementById("game"));
+    setTimeout(() => { document.getElementById("loading").style.opacity = 0; }, 4000);
+    // /app/ is the root of the web server, so include this page's folder
+    // (on GitHub Pages that's /Battleground2028/).
+    const dir = location.pathname.replace(/[^/]*$/, "");
+    await cheerpjRunJar("/app" + dir + "Battleground2028.jar");
+  </script>
+</body>
+</html>
