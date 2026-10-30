@@ -1859,6 +1859,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         String lockD, lockR;                            // nominees the player has locked in (null = let the primaries decide)
         int indStart = 0;                               // independent run: 0 = Labor Day, 1 = from the start of the primaries
         int staffPolling = 1;                           // 0 light, 1 standard, 2 heavy
+        boolean tutorial, tourDone;                     // the optional tutorial: on/off, and whether the headquarters tour has been taken
+        List<String> tipsSeen = new ArrayList<String>();   // first-time tips already shown
 
         String lockOf(int party) { return party == DEM ? lockD : party == REP ? lockR : null; }
     }
@@ -7204,6 +7206,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         if (popup != null) { layer = 1; drawPopup(g); layer = 0; }
         if (modal == null && !modalQueue.isEmpty()) modal = modalQueue.remove(0);
         if (modal != null) { layer = 2; drawModal(g); layer = 0; }
+        try { Tutorial.draw(this, g); } catch (RuntimeException ex) { if (System.getProperty("bg.debug") != null) ex.printStackTrace(); }
         if (tip != null && dragging == null) drawTip(g, tip);
         g.setTransform(base);
     }
@@ -9092,13 +9095,15 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             // menu
             double bx = tx + 4, by = 430, bw = 300, bh = 46;
             u.button(g, bx, by, bw, bh, "New Campaign", B_GOLD, () -> { u.setup = new Settings(); u.go(SC_SETUP); });
+            u.button(g, bx, by + 58, bw, bh, "Tutorial: Learn to Play", B_NORM, () -> { u.setup = new Settings(); u.setup.tutorial = true; u.go(SC_SETUP); },
+                    "A new campaign with the guided tutorial switched on: tips on every screen, a tour of headquarters, and help the first time you reach debates, primaries and Election Night.");
             boolean has = SaveGame.exists(SaveGame.AUTO);
-            u.button(g, bx, by + 58, bw, bh, has ? "Continue  -  " + SaveGame.describe(SaveGame.AUTO) : "Continue", has ? B_PRIMARY : B_OFF, has ? () -> SaveGame.load(u, SaveGame.AUTO) : null);
-            u.button(g, bx, by + 116, bw, bh, "Load Game", SaveGame.exists(SaveGame.SLOT) ? B_NORM : B_OFF, SaveGame.exists(SaveGame.SLOT) ? () -> SaveGame.load(u, SaveGame.SLOT) : null,
+            u.button(g, bx, by + 116, bw, bh, has ? "Continue  -  " + SaveGame.describe(SaveGame.AUTO) : "Continue", has ? B_PRIMARY : B_OFF, has ? () -> SaveGame.load(u, SaveGame.AUTO) : null);
+            u.button(g, bx, by + 174, bw, bh, "Load Game", SaveGame.exists(SaveGame.SLOT) ? B_NORM : B_OFF, SaveGame.exists(SaveGame.SLOT) ? () -> SaveGame.load(u, SaveGame.SLOT) : null,
                     SaveGame.exists(SaveGame.SLOT) ? "Saved: " + SaveGame.describe(SaveGame.SLOT) : "No saved game yet");
-            u.button(g, bx, by + 174, bw, bh, "Briefing, Rules & Sources", B_NORM, () -> openBriefing(u));
-            u.button(g, bx, by + 232, 144, 38, "Sound: " + (sfx != null && sfx.enabled ? "On" : "Off"), B_GHOST, () -> { if (sfx != null) sfx.enabled = !sfx.enabled; });
-            u.button(g, bx + 156, by + 232, 144, 38, "Quit", B_GHOST, () -> { if (u.frame != null) u.frame.dispose(); });
+            u.button(g, bx, by + 232, bw, bh, "Briefing, Rules & Sources", B_NORM, () -> openBriefing(u));
+            u.button(g, bx, by + 290, 144, 38, "Sound: " + (sfx != null && sfx.enabled ? "On" : "Off"), B_GHOST, () -> { if (sfx != null) sfx.enabled = !sfx.enabled; });
+            u.button(g, bx + 156, by + 290, 144, 38, "Quit", B_GHOST, () -> { if (u.frame != null) u.frame.dispose(); });
             // featured match-up
             List<Cand> d = partyList(DEM), r = partyList(REP);
             int slot = (int) (t / 7.0);
@@ -9189,6 +9194,11 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 u.toggle(g, rx, ry, s.staff[i], () -> s.staff[k] = !s.staff[k], null);
                 text(g, Staff.AREA[i], rx + 44, ry + 15, F_S, s.staff[i] ? C_TEXT : C_DIM);
             }
+            y += 96;
+            text(g, "Guided tutorial", ax + 18, y, F_H3, C_TEXT);
+            u.toggle(g, ax + aw - 18 - 36, y - 14, s.tutorial, () -> { s.tutorial = !s.tutorial; if (s.tutorial) { s.tourDone = false; if (s.tipsSeen != null) s.tipsSeen.clear(); } },
+                    "Optional. A tour of headquarters on your first turn, and a tip the first time you reach each part of the game.");
+            wrap(g, s.tutorial ? "On: a tour of headquarters on your first turn, plus a tip the first time you reach each new part of the game." : "Off. Switch it on for a tour of headquarters and tips along the way.", ax + 18, y + 14, aw - 36, F_XS, C_DIM);
             // column B: scenarios
             double bx = 538, bw = 520;
             u.panel(g, bx, ay, bw, 690, "Scenario");
@@ -9596,6 +9606,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             }
             u.endScroll(g, "brief", y + off - 128 + 20);
             u.button(g, 48, 832, 180, 44, "Back", B_GHOST, () -> u.go(briefReturn));
+            if (briefReturn == SC_HQ && u.game != null && u.game.me() != null)
+                u.button(g, 240, 832, 280, 44, "Take the guided tour", B_GOLD, () -> Tutorial.replay(u), "A step-by-step tour of headquarters, plus a tip the first time you reach each part of the game.");
         }
 
         // ---------------------------------------------------------------- RUNNING MATE
@@ -13073,6 +13085,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                         "The left panel holds seven tabs: Schedule, Money, Field, Message, Polls, Campaign and News. The map sits in the middle with five views (six during the primaries). The right panel shows the selected state - or the nation when nothing is selected.",
                         "#A good first week",
                         "Fill the schedule (or press Auto-fill), pick a message frame on the Message tab, commission a poll in an early state, and open a field office or two where the first contests are. Then end the week and read the news.",
+                        "#The tutorial",
+                        "Tutorial: Learn to Play on the main menu (or the Guided tutorial switch when you set up a campaign) gives you a tour of headquarters on your first turn and a tip the first time you reach each part of the game. In a campaign, Take the guided tour on this screen replays the tour.",
                         "#Staff",
                         "Any part of the campaign can be handed to your staff (Campaign tab): they will schedule, buy ads, run the field program, poll and pick the message for you. Use it to focus on what you enjoy.",
                         "#Keys",
@@ -13947,6 +13961,333 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
     }
 
     // =====================================================================
+    //  34.  THE OPTIONAL TUTORIAL: a guided tour of headquarters, then tips the first time each part of the game appears
+    // =====================================================================
+    static final class Tutorial {
+        // ---- the headquarters tour ----
+        static boolean touring;
+        static int step;
+        static boolean condAtEntry;
+        static double doneAt = -1;
+        static int[] snapAct;
+        static int snapSel, snapMode, snapRtab;
+
+        /** One step of the tour: a highlighted region, what it is, and (optionally) something to try. */
+        static final class Step {
+            String title, body, tryIt;
+            double[] rect;
+            Cond cond;
+            Step(String title, String body, double[] rect, String tryIt, Cond cond) { this.title = title; this.body = body; this.rect = rect; this.tryIt = tryIt; this.cond = cond; }
+        }
+
+        interface Cond { boolean met(Battleground2028 u, Game g, Camp me); }
+
+        static Settings settings(Battleground2028 u) { return u.game != null && (u.screen != SC_SETUP && u.screen != SC_PICK && u.screen != SC_CREATE && u.screen != SC_FIELD && u.screen != SC_PLATFORM) ? u.game.set : u.setup; }
+
+        static boolean on(Battleground2028 u) { Settings s = settings(u); return s != null && s.tutorial; }
+
+        static boolean seen(Settings s, String key) { return s.tipsSeen != null && s.tipsSeen.contains(key); }
+
+        static void markSeen(Settings s, String key) {
+            if (s.tipsSeen == null) s.tipsSeen = new ArrayList<String>();
+            if (!s.tipsSeen.contains(key)) s.tipsSeen.add(key);
+        }
+
+        /** Replays the tour in the game in progress (from Help). */
+        static void replay(Battleground2028 u) {
+            if (u.game == null) return;
+            u.game.set.tutorial = true;
+            u.game.set.tourDone = false;
+            touring = false;
+            u.go(SC_HQ);
+        }
+
+        static List<Step> steps(Battleground2028 u, Game g, Camp me) {
+            List<Step> l = new ArrayList<Step>();
+            boolean prim = Hq.primaryView(g);
+            boolean ind = me.party == IND;
+            boolean ballot = Ballot.running(me) && Ballot.count(me) < NS;
+            final double dashY = Hq.MAPY + Hq.MAPH + 30;
+            l.add(new Step("Welcome to headquarters",
+                    "This short tour shows you around. Each step points at one part of the screen; some ask you to try something and move on by themselves when you do. "
+                            + "Press Next to move on, or Skip tour to stop. You can replay it any time from Help (F1).", null, null, null));
+            String standing = prim ? "your standing in the primary (national poll and delegates won)"
+                    : ind ? "your national poll (15% gets you onto the debate stage) and " + (ballot ? "the states where you've qualified for the ballot" : "the states you lead")
+                    : "the national polls and the electoral votes you'd win if the public polls are right";
+            l.add(new Step("The top bar",
+                    "Your cash on hand, " + standing + ", your national name recognition, your base's enthusiasm and your candidate's stamina. Hover over any of them for details. "
+                            + (prim ? "Two years out, primary polls mostly measure name recognition - raise it and you'll climb." : "Name recognition grows with ads, visits, doors, podcasts and debates."),
+                    new double[]{392, 2, 690, 54}, null, null));
+            l.add(new Step("End the turn",
+                    "When your orders are in, end the turn here or press Space. Each turn is one week; the last two weeks before Election Day are played one day at a time. Don't press it yet.",
+                    new double[]{DW - 16 - 160, 9, 160, 40}, null, null));
+            l.add(new Step("The candidate's schedule",
+                    "Three slots a day: morning, afternoon and evening. Rallies, town halls and other events happen in the state on the little button; podcasts, TV and call time happen from anywhere. "
+                            + "The biggest podcasts only book candidates people have heard of. Long same-day flights wear the candidate out.",
+                    new double[]{Hq.LX, Hq.TOP, Hq.LW, 484}, "click a slot and pick an event.",
+                    (uu, gg, m) -> uu.popup != null || snapAct != null && !Arrays.equals(snapAct, m.act)));
+            l.add(new Step("The map",
+                    "Click a state to work it: the right-hand panel switches to that state. Right-click a state to send the candidate there in the next free slot.",
+                    new double[]{Hq.MX, Hq.MAPY, Hq.MW, Hq.MAPH}, "click a state.",
+                    (uu, gg, m) -> Hq.sel >= 0 && Hq.sel != snapSel));
+            l.add(new Step("Map views",
+                    "Switch what the map shows: your spending, your own polls, the public polls and your volunteers" + (prim ? ", plus the primary calendar" : "") + (ballot ? ", plus ballot access" : "")
+                            + ". Faint colours mean old or thin polling.",
+                    new double[]{Hq.MX, Hq.TOP, Hq.MW, 32}, "pick another view.",
+                    (uu, gg, m) -> Hq.mapMode != snapMode));
+            l.add(new Step("The state panel",
+                    "Everything about the selected state: its polls, your name recognition there and your operation. Ads buys TV by media market (prices rise toward November) and sets your digital budget; "
+                            + "Field opens offices and hires organisers; Voters shows who lives there and what they care about.",
+                    new double[]{Hq.RX, Hq.TOP, Hq.RW, Hq.BOT - Hq.TOP}, "open the Ads tab.",
+                    (uu, gg, m) -> Hq.rtab != snapRtab));
+            l.add(new Step("Money",
+                    "Cash, where it comes from and how fast big donors are tapping out; the size of your headquarters; " + (me.c.selfMax > 0 ? "self-funding (a weekly transfer, or a one-time check); " : "")
+                            + "national TV; and your digital plan: split the online budget across platforms - Facebook skews older, Instagram, YouTube and TikTok younger - and choose what each one says.",
+                    new double[]{Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP}, "open the Money tab (or press 2).",
+                    (uu, gg, m) -> Hq.tab == 1));
+            l.add(new Step("Field",
+                    (ind && Ballot.running(me) ? "As an independent, start here: fund petitions in every state before its filing deadline, or you'll only be a write-in there. Below that, your ground game: " : "Your ground game: ")
+                            + "offices hold organisers, organisers recruit volunteers, and volunteers knock doors, make calls and send texts. Contacts persuade a few voters and, in the final weeks, turn out your supporters.",
+                    new double[]{Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP}, "open the Field tab (or press 3).",
+                    (uu, gg, m) -> Hq.tab == 2));
+            l.add(new Step("Message",
+                    "Each week pick a frame (your message) and an attack line, or stay positive. Issue focus sets one main issue and two secondary ones: credibility on them builds every week you stay on them. "
+                            + "Promises win over some voters and anger others - and they're permanent.",
+                    new double[]{Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP}, "open the Message tab (or press 4).",
+                    (uu, gg, m) -> Hq.tab == 3));
+            l.add(new Step("Polls",
+                    "Commission polls - bigger samples and live callers cost more but miss less - or set your pollster to run on its own. The Issues view shows what voters care about, whom they trust on each issue and whether they agree with you.",
+                    new double[]{Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP}, "open the Polls tab (or press 5).",
+                    (uu, gg, m) -> Hq.tab == 4));
+            l.add(new Step("Campaign",
+                    "Hand any part of the campaign to your staff: the schedule, ads, field, polling or the message. Also here: your debates, rally crowds and podcast audiences, opposition research and endorsements.",
+                    new double[]{Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP}, "open the Campaign tab (or press 6).",
+                    (uu, gg, m) -> Hq.tab == 5));
+            l.add(new Step("The race and the news",
+                    (prim ? "The race for your party's nomination, with the next contests, " : "The race for 270 and the national polling trend, ")
+                            + "and this week's news. After every turn a short recap appears over the map: money, polls, volunteers, rallies and podcasts.",
+                    new double[]{Hq.MX, dashY, Hq.MW, Hq.BOT - dashY}, null, null));
+            l.add(new Step("You're ready",
+                    "Fill the " + (g.daily() ? "day" : "week") + ", spend, then press END " + (g.daily() ? "DAY" : "WEEK") + ". With the tutorial on, a tip will appear the first time you reach a debate, a primary night, a fight over an endorsement, "
+                            + "the final stretch and the results. Replay this tour any time from Help (F1).", null, null, null));
+            return l;
+        }
+
+        static void enterStep(Battleground2028 u, Game g, Camp me) {
+            snapAct = me.act.clone();
+            snapSel = Hq.sel;
+            snapMode = Hq.mapMode;
+            snapRtab = Hq.rtab;
+            doneAt = -1;
+            List<Step> l = steps(u, g, me);
+            if (step >= 0 && step < l.size()) {
+                Step s = l.get(step);
+                if (s.title.startsWith("The candidate's schedule")) Hq.tab = 0;
+                if (s.title.startsWith("The state panel") && Hq.sel < 0) { Hq.sel = me.c.home >= 0 ? me.c.home : stateIdx("PA"); snapSel = Hq.sel; }
+                condAtEntry = s.cond != null && s.cond.met(u, g, me);
+            }
+        }
+
+        static void go(Battleground2028 u, int to) {
+            Game g = u.game;
+            Camp me = g.me();
+            List<Step> l = steps(u, g, me);
+            if (to >= l.size() || to < 0) { finish(u); return; }
+            step = to;
+            enterStep(u, g, me);
+        }
+
+        static void finish(Battleground2028 u) {
+            touring = false;
+            if (u.game != null) u.game.set.tourDone = true;
+        }
+
+        // ---- drawing (called once per frame, on top of everything but tooltips) ----
+        static void draw(Battleground2028 u, Graphics2D g) {
+            if (!on(u)) { touring = false; return; }
+            Settings s = settings(u);
+            int saved = u.layer;
+            u.layer = u.topLayer;
+            try {
+                if (u.screen == SC_HQ && u.game != null && u.game.me() != null && !Hq.resolving && !Hq.fastForward) {
+                    Game game = u.game;
+                    Camp me = game.me();
+                    if (!touring && !s.tourDone && u.modal == null && game.pending.isEmpty()) { touring = true; step = 0; enterStep(u, game, me); }
+                    if (touring) {
+                        if (u.modal == null && u.popup == null) tour(u, g, game, me);     // out of the way while a menu is open
+                        else if (u.modal != null) tips(u, g, s);
+                        return;
+                    }
+                }
+                tips(u, g, s);
+            } finally {
+                u.layer = saved;
+            }
+        }
+
+        static void tour(Battleground2028 u, Graphics2D g, Game game, Camp me) {
+            List<Step> l = steps(u, game, me);
+            if (step >= l.size()) { finish(u); return; }
+            Step st = l.get(step);
+            boolean met = st.cond != null && st.cond.met(u, game, me);
+            if (met && !condAtEntry && doneAt < 0) doneAt = u.tsec;
+            if (!met && condAtEntry) condAtEntry = false;
+            if (doneAt >= 0 && u.tsec - doneAt > 0.9 && u.popup == null) { go(u, step + 1); return; }
+            // spotlight
+            Area dim = new Area(new Rectangle2D.Double(0, 0, DW, DH));
+            if (st.rect != null) dim.subtract(new Area(new RoundRectangle2D.Double(st.rect[0] - 4, st.rect[1] - 4, st.rect[2] + 8, st.rect[3] + 8, 12, 12)));
+            g.setColor(new Color(2, 6, 14, st.rect == null ? 150 : 120));
+            g.fill(dim);
+            if (st.rect != null) {
+                double pulse = 0.55 + 0.45 * Math.sin(u.tsec * 4);
+                g.setStroke(new BasicStroke(2.5f));
+                g.setColor(alpha(C_GOLD, 0.55 + 0.4 * pulse));
+                g.draw(new RoundRectangle2D.Double(st.rect[0] - 4, st.rect[1] - 4, st.rect[2] + 8, st.rect[3] + 8, 12, 12));
+                g.setStroke(new BasicStroke(1f));
+            }
+            // the card
+            double w = st.rect == null ? 560 : 400;
+            double bodyH = wrapHeight(g, st.body, w - 36, F_S);
+            double tryH = st.tryIt != null ? wrapHeight(g, "Try it: " + st.tryIt, w - 36, F_XSB) + 10 : 0;
+            double h = 66 + bodyH + tryH + 62;
+            double[] p = place(st.rect, w, h);
+            double x = p[0], y = p[1];
+            card(g, x, y, w, h);
+            u.hit(x, y, w, h, () -> { }, null);
+            label(g, "TUTORIAL  " + (step + 1) + " / " + l.size(), x + 18, y + 22, C_GOLD);
+            text(g, st.title, x + 18, y + 50, F_H3, Color.white);
+            double cy = y + 70 + wrap(g, st.body, x + 18, y + 70, w - 36, F_S, C_TEXT);
+            if (st.tryIt != null) {
+                boolean done = doneAt >= 0 || met && condAtEntry;
+                wrap(g, done ? "Done!" : "Try it: " + st.tryIt, x + 18, cy + 10, w - 36, F_XSB, done ? C_GOOD : C_GOLD);
+            }
+            double by = y + h - 46;
+            boolean last = step == l.size() - 1;
+            u.button(g, x + w - 18 - 120, by, 120, 32, last ? "Start" : "Next", B_GOLD, () -> go(u, step + 1), last ? "Close the tour and start campaigning." : null);
+            if (step > 0) u.button(g, x + w - 18 - 120 - 90, by, 80, 32, "Back", B_NORM, () -> go(u, step - 1));
+            if (!last) u.button(g, x + 18, by, 110, 32, "Skip tour", B_GHOST, () -> finish(u), "End the tour. Tips will still appear the first time each part of the game comes up.");
+        }
+
+        /** Puts the card beside the highlighted region, wherever it fits. */
+        static double[] place(double[] r, double w, double h) {
+            if (r == null) return new double[]{(DW - w) / 2, (DH - h) / 2};
+            double x, y;
+            if (r[0] + r[2] + 16 + w <= DW - 8) { x = r[0] + r[2] + 16; y = r[1]; }
+            else if (r[0] - 16 - w >= 8) { x = r[0] - 16 - w; y = r[1]; }
+            else if (r[1] + r[3] + 16 + h <= DH - 8) { x = r[0] + r[2] / 2 - w / 2; y = r[1] + r[3] + 16; }
+            else { x = r[0] + r[2] / 2 - w / 2; y = r[1] - 16 - h; }
+            if (r[3] < 80 && r[1] < 100) { y = r[1] + r[3] + 16; x = r[0] + r[2] / 2 - w / 2; }      // thin bars along the top: card goes underneath
+            return new double[]{clamp(x, 8, DW - w - 8), clamp(y, 8, DH - h - 8)};
+        }
+
+        static void card(Graphics2D g, double x, double y, double w, double h) {
+            g.setColor(new Color(0, 0, 0, 120));
+            g.fill(new RoundRectangle2D.Double(x + 4, y + 8, w, h, 14, 14));
+            RoundRectangle2D rr = new RoundRectangle2D.Double(x, y, w, h, 14, 14);
+            g.setPaint(new GradientPaint((float) x, (float) y, rgb(0x1a2a46), (float) x, (float) (y + h), rgb(0x0e1830)));
+            g.fill(rr);
+            g.setColor(alpha(C_GOLD, 0.8));
+            g.setStroke(new BasicStroke(1.4f));
+            g.draw(rr);
+            g.setStroke(new BasicStroke(1f));
+            g.setColor(C_GOLD);
+            g.fill(new RoundRectangle2D.Double(x + 18, y, 70, 4, 4, 4));
+        }
+
+        // ---- first-time tips ----
+        static final int A_TOP = 0, A_TOPRIGHT = 1, A_BOTLEFT = 2, A_BOTCENTER = 3;
+
+        /** Which tip (if any) applies right now: {key, title, body, anchor}. */
+        static Object[] currentTip(Battleground2028 u) {
+            Game g = u.game;
+            Modal m = u.modal;
+            switch (u.screen) {
+                case SC_SETUP:
+                    return new Object[]{"setup", "Setting up your race", "New to the game? Try General election only on Easy: it's shorter. A full campaign starts two years out, the week after the 2026 midterms, and runs through the primaries. "
+                            + "Pick a scenario, then choose your candidate.", A_BOTCENTER};
+                case SC_PICK:
+                    return new Object[]{"pick", "Choosing a candidate", "Click a card to see a candidate's ratings, record, strengths and weaknesses. Edit platform tweaks their starting positions; the last card builds your own candidate; "
+                            + "the Independent tab runs outside the two parties. When you're happy, press Run as.", A_BOTCENTER};
+                case SC_FIELD:
+                    if (FieldScreen.opponentsOnly)
+                        return new Object[]{"field_ind", "Your opponents", "Click the Democrat and the Republican you'd like to face, or keep the likeliest nominees. Then press Start the campaign.", A_BOTCENTER};
+                    return new Object[]{"field", "Who's running", "Optional: click candidates to keep them out of the race, and lock in the other party's nominee if you like. Or just press Start the campaign.", A_BOTCENTER};
+                case SC_CREATE:
+                    return new Object[]{"create", "Building a candidate", "Choose a look, a name, a home state and a party, then spend points on ratings (Unlimited lifts the cap). Hover over any rating to see what it does. Run as starts the campaign.", A_BOTCENTER};
+                case SC_VP:
+                    return new Object[]{"vp", "Choosing a running mate", "Each card shows the projected effect on your ticket nationally and in the running mate's home state. Vetting costs money but reveals scandal risk before reporters do.", A_BOTCENTER};
+                case SC_NEGOT:
+                    return new Object[]{"negot", "Debate negotiations", "Propose how many debates, when, whether there's a vice-presidential debate, the networks and the rules. Your opponent counters; strong debaters want more debates, weak ones fewer.", A_BOTCENTER};
+                case SC_DEBATE: {
+                    DebateRun r = DebateView.run;
+                    if (r != null && r.myIdx >= 0)
+                        return new Object[]{"debate", "Debate night", "For each question, pick an approach (keys 1-6), then the line you'll deliver (1-3). Approaches beat each other like rock-paper-scissors; your prep, charisma and intellect decide how well it lands. "
+                                + "If a rival comes after you, pick a response (1-4). The dial shows how a focus group reacts.", A_TOPRIGHT};
+                    return null;
+                }
+                case SC_NIGHT:
+                    return new Object[]{"night", "Election Night", "States are called as the votes come in. Use the speed buttons to fast-forward, or End to jump to the final result.", A_BOTLEFT};
+                case SC_RESULTS:
+                    return new Object[]{"results", "Exploring the results", "Click any state for its vote, its swing since 2024, turnout and how each group voted. The tabs compare every state, every group, turnout and the races for Congress.", A_BOTCENTER};
+                case SC_HQ: {
+                    if (g == null || g.me() == null) return null;
+                    if (m != null && m.title != null) {
+                        if (m.title.endsWith("drops out") && m.buttons != null && m.buttons.length == 2)
+                            return new Object[]{"endorse", "Fighting for an endorsement", "A rival has quit. The table shows where their voters are expected to go. Switch on offers - policy promises, a cabinet post, the vice-presidential slot, a convention speech - and watch your odds change. "
+                                    + "Rivals are bidding too, and promises are binding.", A_TOP};
+                        if (m.title.startsWith("Primary night") || m.title.startsWith("Results:"))
+                            return new Object[]{"primary", "Primary night", "Delegates are shared out by vote share (Democrats need 15% to win any; many later Republican contests are winner-take-all). Beating expectations brings momentum: money, press and voters follow.", A_TOP};
+                        if (m.title.startsWith("Your closing argument"))
+                            return new Object[]{"closing", "The closing argument", "The last thing you want voters to hear. It builds every day you stick with it, and the fit score shows how well it suits you and the moment. Changing it later throws most of that away.", A_TOP};
+                        if (m.stacked && m.face != null && m.buttons != null && m.buttons.length >= 2 && !m.title.startsWith("When does"))
+                            return new Object[]{"event", "Events", "The world intervenes. Pick a response: each one moves your platform and particular groups of voters, so there's rarely a free choice.", A_TOP};
+                        return null;
+                    }
+                    if (g.daily())
+                        return new Object[]{"daily", "The final stretch", "Each turn is now a single day. Plan the day's three events (the rest of the week can wait), keep your closing argument steady and pour everything into turnout.", A_TOPRIGHT};
+                    return null;
+                }
+                default:
+                    return null;
+            }
+        }
+
+        static void tips(Battleground2028 u, Graphics2D g, Settings s) {
+            Object[] t = currentTip(u);
+            if (t == null) return;
+            final String key = (String) t[0];
+            if (seen(s, key)) return;
+            if (u.screen == SC_HQ && u.popup != null) return;
+            String title = (String) t[1], body = (String) t[2];
+            int anchor = (Integer) t[3];
+            double w = anchor == A_TOP || anchor == A_BOTCENTER ? 640 : 430;
+            // screens with a quiet corner of their own: put the tip there, clear of the controls
+            double[] spot = key.equals("setup") ? new double[]{548, -1, 500} : key.equals("vp") ? new double[]{686, 572, 560}
+                    : key.equals("negot") ? new double[]{830, 420, 600} : key.equals("results") ? new double[]{1062, 560, 476} : null;
+            if (spot != null) w = spot[2];
+            double bodyH = wrapHeight(g, body, w - 36, F_S);
+            double h = 56 + bodyH + 54;
+            double x, y;
+            switch (anchor) {
+                case A_TOP: x = (DW - w) / 2; y = 8; break;
+                case A_TOPRIGHT: x = DW - w - 16; y = 96; break;
+                case A_BOTLEFT: x = 48; y = DH - h - 60; break;
+                default: x = (DW - w) / 2; y = DH - h - 76; break;
+            }
+            if (spot != null) { x = spot[0]; if (spot[1] >= 0) y = spot[1]; }
+            // a modal underneath: keep the tip clear of it
+            if (u.modal != null && anchor == A_TOP) y = 8;
+            card(g, x, y, w, h);
+            u.hit(x, y, w, h, () -> { }, null);
+            label(g, "TIP", x + 18, y + 22, C_GOLD);
+            text(g, title, x + 54, y + 23, F_SB, Color.white);
+            wrap(g, body, x + 18, y + 46, w - 36, F_S, C_TEXT);
+            u.button(g, x + w - 18 - 100, y + h - 44, 100, 30, "Got it", B_GOLD, () -> markSeen(s, key));
+            u.button(g, x + 18, y + h - 44, 150, 30, "Turn off tips", B_GHOST, () -> { s.tutorial = false; touring = false; }, "Switch the tutorial off for this campaign. You can replay the tour from Help.");
+        }
+    }
+
+    // =====================================================================
     //  MAIN
     // =====================================================================
     public static void main(String[] args) {
@@ -14079,6 +14420,42 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             if (all || which.contains("pick")) { u.go(SC_PICK); Screens.pickParty = DEM; Screens.pickSel = 4; shot(u, dir, "ui_pick"); Screens.pickParty = REP; Screens.pickSel = 0; shot(u, dir, "ui_pick_r"); }
             if (all || which.contains("plat")) { PlatformEd.open(u, candById("shapiro"), SC_PICK); PlatformEd.plat[I_IMMIG] += 0.3; shot(u, dir, "ui_platform"); }
             if (all || which.contains("create")) { Creator.start(u, DEM); u.go(SC_CREATE); shot(u, dir, "ui_create"); }
+            if (all || which.contains("tut")) {
+                Settings st = new Settings();
+                st.tutorial = true;
+                u.setup = st;
+                u.go(SC_SETUP); shot(u, dir, "ui_tut_setup");
+                u.go(SC_PICK); Screens.pickParty = DEM; Screens.pickSel = 4; shot(u, dir, "ui_tut_pick");
+                st.candId = "shapiro"; st.party = DEM; st.seed = 43;
+                Screens.startGame(u, candById("shapiro"));
+                u.modal = null;
+                Game tg = u.game;
+                tg.pending.clear();
+                Hq.tab = 0; Hq.mapMode = MM_BLANK; Hq.rtab = 0;
+                u.mx = -1; u.my = -1;
+                int[] want = {0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13};
+                for (int k = 0; k < want.length; k++) {
+                    Tutorial.go(u, want[k]);
+                    if (want[k] >= 7 && want[k] <= 11) Hq.tab = want[k] - 6;
+                    shot(u, dir, "ui_tut_step" + want[k]);
+                }
+                Tutorial.finish(u);
+                Hq.tab = 0;
+                // first-time tips over a modal and on the debate stage
+                Camp from = null;
+                for (Camp k : tg.camps) if (k.party == DEM && k.active && k != tg.me() && (from == null || k.c.poll > from.c.poll)) from = k;
+                if (from != null) {
+                    double[] before = Vote.primaryNational(tg, DEM).clone();
+                    Deals.endorse(u, tg, new Object[]{EV_ENDORSE, "", "", new String[0], from.idx, before, before.clone()});
+                    shot(u, dir, "ui_tut_endorse");
+                    u.modal = null;
+                }
+                Debate d0 = null;
+                for (Debate dd : tg.debates) if (!dd.done && dd.party == DEM && (d0 == null || dd.week < d0.week)) d0 = dd;
+                if (d0 != null) { tg.week = d0.week; DebateView.start(u, d0); shot(u, dir, "ui_tut_debate"); }
+                Tutorial.touring = false;
+                u.game = null;
+            }
             if (all || which.contains("brief")) { Screens.briefTopic = 7; u.go(SC_BRIEF); shot(u, dir, "ui_brief"); Screens.briefTopic = 9; shot(u, dir, "ui_brief_sources"); }
             Settings set = new Settings();
             set.candId = "shapiro"; set.party = DEM; set.seed = 42;

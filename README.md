@@ -23,6 +23,8 @@ javac Battleground2028.java
 java Battleground2028
 ```
 
+New to the game? Choose **Tutorial: Learn to Play** on the main menu. It starts a campaign with a guided tour of headquarters and a tip the first time you reach each part of the game (debates, primary nights, endorsement fights, the final stretch, Election Night). You can also switch the **Guided tutorial** on when you set up any campaign, or replay the tour from **Help** during a game.
+
 The window scales to your screen. The game autosaves every week to a `.battleground2028` folder in your home directory, and **Continue** on the main menu picks up where you left off. Press **F1** in the game for the full briefing.
 
 ## What's new in version 2
@@ -78,6 +80,7 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
 | ![Who's running](screenshots/field.png) | ![Debate lines](screenshots/debate-lines.png) |
 | ![Issue polling](screenshots/issue-polling.png) | ![Ballot access](screenshots/ballot-access.png) |
 | ![Results explorer](screenshots/results.png) | ![The final stretch](screenshots/final-stretch.png) |
+| ![The tutorial](screenshots/tutorial.png) | |
 
 ## How the simulation works
 
