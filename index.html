@@ -1143,6 +1143,9 @@ this.lockD = null;
 this.lockR = null;
 this.indStart = 0;
 this.staffPolling = 1;
+this.tutorial = false;
+this.tourDone = false;
+this.tipsSeen = [];
 }
 lockOf(party) {
 return ((party === DEM) ? this.lockD : ((party === REP) ? this.lockR : null));
@@ -7598,14 +7601,19 @@ u.button$8(g, bx, by, bw, bh, "New Campaign", B_GOLD, () => {
 u.setup = new Settings();
 u.go(SC_SETUP);
 });
+u.button$9(g, bx, (by + 58), bw, bh, "Tutorial: Learn to Play", B_NORM, () => {
+u.setup = new Settings();
+u.setup.tutorial = true;
+u.go(SC_SETUP);
+}, "A new campaign with the guided tutorial switched on: tips on every screen, a tour of headquarters, and help the first time you reach debates, primaries and Election Night.");
 let has = SaveGame.exists(SaveGame.AUTO);
-u.button$8(g, bx, (by + 58), bw, bh, (has ? ("Continue  -  " + SaveGame.describe(SaveGame.AUTO)) : "Continue"), (has ? B_PRIMARY : B_OFF), (has ? () => (SaveGame.load(u, SaveGame.AUTO)) : null));
-u.button$9(g, bx, (by + 116), bw, bh, "Load Game", (SaveGame.exists(SaveGame.SLOT) ? B_NORM : B_OFF), (SaveGame.exists(SaveGame.SLOT) ? () => (SaveGame.load(u, SaveGame.SLOT)) : null), (SaveGame.exists(SaveGame.SLOT) ? ("Saved: " + SaveGame.describe(SaveGame.SLOT)) : "No saved game yet"));
-u.button$8(g, bx, (by + 174), bw, bh, "Briefing, Rules & Sources", B_NORM, () => (Screens.openBriefing(u)));
-u.button$8(g, bx, (by + 232), 144, 38, ("Sound: " + ((((sfx !== null) && sfx.enabled) ? "On" : "Off"))), B_GHOST, () => {
+u.button$8(g, bx, (by + 116), bw, bh, (has ? ("Continue  -  " + SaveGame.describe(SaveGame.AUTO)) : "Continue"), (has ? B_PRIMARY : B_OFF), (has ? () => (SaveGame.load(u, SaveGame.AUTO)) : null));
+u.button$9(g, bx, (by + 174), bw, bh, "Load Game", (SaveGame.exists(SaveGame.SLOT) ? B_NORM : B_OFF), (SaveGame.exists(SaveGame.SLOT) ? () => (SaveGame.load(u, SaveGame.SLOT)) : null), (SaveGame.exists(SaveGame.SLOT) ? ("Saved: " + SaveGame.describe(SaveGame.SLOT)) : "No saved game yet"));
+u.button$8(g, bx, (by + 232), bw, bh, "Briefing, Rules & Sources", B_NORM, () => (Screens.openBriefing(u)));
+u.button$8(g, bx, (by + 290), 144, 38, ("Sound: " + ((((sfx !== null) && sfx.enabled) ? "On" : "Off"))), B_GHOST, () => {
 if ((sfx !== null)) { sfx.enabled = !sfx.enabled; }
 });
-u.button$8(g, (bx + 156), (by + 232), 144, 38, "Quit", B_GHOST, () => {
+u.button$8(g, (bx + 156), (by + 290), 144, 38, "Quit", B_GHOST, () => {
 if ((u.frame !== null)) { u.frame.dispose(); }
 });
 let d = Screens.partyList(DEM), r = Screens.partyList(REP);
@@ -7686,6 +7694,13 @@ let rx = ((ax + 18) + (((i % 3)) * 145)), ry = ((y + 28) + (($idiv(i, 3)) * 28))
 u.toggle(g, rx, ry, s.staff[i], () => ((s.staff[k] = !s.staff[k])), null);
 text(g, Staff.AREA[i], (rx + 44), (ry + 15), F_S, (s.staff[i] ? C_TEXT : C_DIM));
 }
+y += 96;
+text(g, "Guided tutorial", (ax + 18), y, F_H3, C_TEXT);
+u.toggle(g, (((ax + aw) - 18) - 36), (y - 14), !!s.tutorial, () => {
+s.tutorial = !s.tutorial;
+if (s.tutorial) { s.tourDone = false; if (s.tipsSeen != null) { s.tipsSeen.length = 0; } }
+}, "Optional. A tour of headquarters on your first turn, and a tip the first time you reach each part of the game.");
+wrap(g, (s.tutorial ? "On: a tour of headquarters on your first turn, plus a tip the first time you reach each new part of the game." : "Off. Switch it on for a tour of headquarters and tips along the way."), (ax + 18), (y + 14), (aw - 36), F_XS, C_DIM);
 let bx = 538, bw = 520;
 u.panel(g, bx, ay, bw, 690, "Scenario");
 for (let i = 0; (i < NSCEN); i++) {
@@ -8138,6 +8153,7 @@ y += (wrap(g, para, 360, y, (DW - 440), F_B, C_TEXT) + 10);
 }
 u.endScroll(g, "brief", (((y + off) - 128) + 20));
 u.button$8(g, 48, 832, 180, 44, "Back", B_GHOST, () => (u.go(Screens.briefReturn)));
+if (Screens.briefReturn === SC_HQ && u.game !== null && u.game.me() !== null) { u.button$9(g, 240, 832, 280, 44, "Take the guided tour", B_GOLD, () => (Tutorial.replay(u)), "A step-by-step tour of headquarters, plus a tip the first time you reach each part of the game."); }
 }
 static vpEff(game, me, c) {
 let key = ((((c.id + "@") + game.week) + "@") + $ihash(game));
@@ -12589,6 +12605,323 @@ wrap(g, (("No candidate reached 270 electoral votes, so under the 12th Amendment
 }
 }
 }
+// =====================================================================
+//  34.  THE OPTIONAL TUTORIAL: a guided tour of headquarters, then tips the first time each part of the game appears
+// =====================================================================
+class TutorialStep {
+constructor(title, body, rect, tryIt, cond) { this.title = title; this.body = body; this.rect = rect; this.tryIt = tryIt; this.cond = cond; }
+}
+class Tutorial {
+static changed(a, b) {
+if (a == null || b == null) return false;
+for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return true;
+return false;
+}
+static settings(u) { return (u.game !== null && (u.screen !== SC_SETUP && u.screen !== SC_PICK && u.screen !== SC_CREATE && u.screen !== SC_FIELD && u.screen !== SC_PLATFORM)) ? u.game.set : u.setup; }
+static on(u) { const s = Tutorial.settings(u); return s != null && !!s.tutorial; }
+static seen(s, key) { return s.tipsSeen != null && s.tipsSeen.includes(key); }
+static markSeen(s, key) {
+if (s.tipsSeen == null) s.tipsSeen = [];
+if (!s.tipsSeen.includes(key)) s.tipsSeen.push(key);
+}
+/** Replays the tour in the game in progress (from Help). */
+static replay(u) {
+if (u.game === null) return;
+u.game.set.tutorial = true;
+u.game.set.tourDone = false;
+Tutorial.touring = false;
+u.go(SC_HQ);
+}
+static steps(u, g, me) {
+const l = [];
+const prim = Hq.primaryView(g);
+const ind = me.party === IND;
+const ballot = Ballot.running(me) && Ballot.count(me) < NS;
+const dashY = Hq.MAPY + Hq.MAPH + 30;
+const S = (a, b, c, d, e) => new TutorialStep(a, b, c, d, e);
+l.push(S("Welcome to headquarters",
+"This short tour shows you around. Each step points at one part of the screen; some ask you to try something and move on by themselves when you do. "
++ "Press Next to move on, or Skip tour to stop. You can replay it any time from Help (F1).", null, null, null));
+const standing = prim ? "your standing in the primary (national poll and delegates won)"
+: ind ? "your national poll (15% gets you onto the debate stage) and " + (ballot ? "the states where you've qualified for the ballot" : "the states you lead")
+: "the national polls and the electoral votes you'd win if the public polls are right";
+l.push(S("The top bar",
+"Your cash on hand, " + standing + ", your national name recognition, your base's enthusiasm and your candidate's stamina. Hover over any of them for details. "
++ (prim ? "Two years out, primary polls mostly measure name recognition - raise it and you'll climb." : "Name recognition grows with ads, visits, doors, podcasts and debates."),
+[392, 2, 690, 54], null, null));
+l.push(S("End the turn",
+"When your orders are in, end the turn here or press Space. Each turn is one week; the last two weeks before Election Day are played one day at a time. Don't press it yet.",
+[DW - 16 - 160, 9, 160, 40], null, null));
+l.push(S("The candidate's schedule",
+"Three slots a day: morning, afternoon and evening. Rallies, town halls and other events happen in the state on the little button; podcasts, TV and call time happen from anywhere. "
++ "The biggest podcasts only book candidates people have heard of. Long same-day flights wear the candidate out.",
+[Hq.LX, Hq.TOP, Hq.LW, 484], "click a slot and pick an event.",
+(uu, gg, m) => uu.popup !== null || Tutorial.changed(Tutorial.snapAct, m.act)));
+l.push(S("The map",
+"Click a state to work it: the right-hand panel switches to that state. Right-click a state to send the candidate there in the next free slot.",
+[Hq.MX, Hq.MAPY, Hq.MW, Hq.MAPH], "click a state.",
+(uu, gg, m) => Hq.sel >= 0 && Hq.sel !== Tutorial.snapSel));
+l.push(S("Map views",
+"Switch what the map shows: your spending, your own polls, the public polls and your volunteers" + (prim ? ", plus the primary calendar" : "") + (ballot ? ", plus ballot access" : "")
++ ". Faint colours mean old or thin polling.",
+[Hq.MX, Hq.TOP, Hq.MW, 32], "pick another view.",
+(uu, gg, m) => Hq.mapMode !== Tutorial.snapMode));
+l.push(S("The state panel",
+"Everything about the selected state: its polls, your name recognition there and your operation. Ads buys TV by media market (prices rise toward November) and sets your digital budget; "
++ "Field opens offices and hires organisers; Voters shows who lives there and what they care about.",
+[Hq.RX, Hq.TOP, Hq.RW, Hq.BOT - Hq.TOP], "open the Ads tab.",
+(uu, gg, m) => Hq.rtab !== Tutorial.snapRtab));
+l.push(S("Money",
+"Cash, where it comes from and how fast big donors are tapping out; the size of your headquarters; " + (me.c.selfMax > 0 ? "self-funding (a weekly transfer, or a one-time check); " : "")
++ "national TV; and your digital plan: split the online budget across platforms - Facebook skews older, Instagram, YouTube and TikTok younger - and choose what each one says.",
+[Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP], "open the Money tab (or press 2).",
+(uu, gg, m) => Hq.tab === 1));
+l.push(S("Field",
+(ind && Ballot.running(me) ? "As an independent, start here: fund petitions in every state before its filing deadline, or you'll only be a write-in there. Below that, your ground game: " : "Your ground game: ")
++ "offices hold organisers, organisers recruit volunteers, and volunteers knock doors, make calls and send texts. Contacts persuade a few voters and, in the final weeks, turn out your supporters.",
+[Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP], "open the Field tab (or press 3).",
+(uu, gg, m) => Hq.tab === 2));
+l.push(S("Message",
+"Each week pick a frame (your message) and an attack line, or stay positive. Issue focus sets one main issue and two secondary ones: credibility on them builds every week you stay on them. "
++ "Promises win over some voters and anger others - and they're permanent.",
+[Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP], "open the Message tab (or press 4).",
+(uu, gg, m) => Hq.tab === 3));
+l.push(S("Polls",
+"Commission polls - bigger samples and live callers cost more but miss less - or set your pollster to run on its own. The Issues view shows what voters care about, whom they trust on each issue and whether they agree with you.",
+[Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP], "open the Polls tab (or press 5).",
+(uu, gg, m) => Hq.tab === 4));
+l.push(S("Campaign",
+"Hand any part of the campaign to your staff: the schedule, ads, field, polling or the message. Also here: your debates, rally crowds and podcast audiences, opposition research and endorsements.",
+[Hq.LX, Hq.TOP, Hq.LW, Hq.BOT - Hq.TOP], "open the Campaign tab (or press 6).",
+(uu, gg, m) => Hq.tab === 5));
+l.push(S("The race and the news",
+(prim ? "The race for your party's nomination, with the next contests, " : "The race for 270 and the national polling trend, ")
++ "and this week's news. After every turn a short recap appears over the map: money, polls, volunteers, rallies and podcasts.",
+[Hq.MX, dashY, Hq.MW, Hq.BOT - dashY], null, null));
+l.push(S("You're ready",
+"Fill the " + (g.daily() ? "day" : "week") + ", spend, then press END " + (g.daily() ? "DAY" : "WEEK") + ". With the tutorial on, a tip will appear the first time you reach a debate, a primary night, a fight over an endorsement, "
++ "the final stretch and the results. Replay this tour any time from Help (F1).", null, null, null));
+return l;
+}
+static enterStep(u, g, me) {
+Tutorial.snapAct = me.act.slice();
+Tutorial.snapSel = Hq.sel;
+Tutorial.snapMode = Hq.mapMode;
+Tutorial.snapRtab = Hq.rtab;
+Tutorial.doneAt = -1;
+const l = Tutorial.steps(u, g, me);
+if (Tutorial.step >= 0 && Tutorial.step < l.length) {
+const s = l[Tutorial.step];
+if (s.title.startsWith("The candidate's schedule")) Hq.tab = 0;
+if (s.title.startsWith("The state panel") && Hq.sel < 0) { Hq.sel = me.c.home >= 0 ? me.c.home : stateIdx("PA"); Tutorial.snapSel = Hq.sel; }
+Tutorial.condAtEntry = s.cond !== null && s.cond(u, g, me);
+}
+}
+static go(u, to) {
+const g = u.game;
+const me = g.me();
+const l = Tutorial.steps(u, g, me);
+if (to >= l.length || to < 0) { Tutorial.finish(u); return; }
+Tutorial.step = to;
+Tutorial.enterStep(u, g, me);
+}
+static finish(u) {
+Tutorial.touring = false;
+if (u.game !== null) u.game.set.tourDone = true;
+}
+// ---- drawing (called once per frame, on top of everything but tooltips) ----
+static draw(u, g) {
+if (!Tutorial.on(u)) { Tutorial.touring = false; return; }
+const s = Tutorial.settings(u);
+const saved = u.layer;
+u.layer = u.topLayer;
+try {
+if (u.screen === SC_HQ && u.game !== null && u.game.me() !== null && !Hq.resolving && !Hq.fastForward) {
+const game = u.game;
+const me = game.me();
+if (!Tutorial.touring && !s.tourDone && u.modal === null && game.pending.length === 0) { Tutorial.touring = true; Tutorial.step = 0; Tutorial.enterStep(u, game, me); }
+if (Tutorial.touring) {
+if (u.modal === null && u.popup === null) Tutorial.tour(u, g, game, me);     // out of the way while a menu is open
+else if (u.modal !== null) Tutorial.tips(u, g, s);
+return;
+}
+}
+Tutorial.tips(u, g, s);
+} finally {
+u.layer = saved;
+}
+}
+static tour(u, g, game, me) {
+const l = Tutorial.steps(u, game, me);
+if (Tutorial.step >= l.length) { Tutorial.finish(u); return; }
+const st = l[Tutorial.step];
+const met = st.cond !== null && st.cond(u, game, me);
+if (met && !Tutorial.condAtEntry && Tutorial.doneAt < 0) Tutorial.doneAt = u.tsec;
+if (!met && Tutorial.condAtEntry) Tutorial.condAtEntry = false;
+if (Tutorial.doneAt >= 0 && u.tsec - Tutorial.doneAt > 0.9 && u.popup === null) { Tutorial.go(u, Tutorial.step + 1); return; }
+// spotlight: dim everything except the highlighted region
+g.setColor(new Color(2, 6, 14, st.rect === null ? 150 : 120));
+if (st.rect === null) g.fill(new Rectangle2D.Double(0, 0, DW, DH));
+else {
+const rx = st.rect[0] - 4, ry = st.rect[1] - 4, rw = st.rect[2] + 8, rh = st.rect[3] + 8;
+g.fill(new Rectangle2D.Double(0, 0, DW, Math.max(0, ry)));
+g.fill(new Rectangle2D.Double(0, ry + rh, DW, Math.max(0, DH - ry - rh)));
+g.fill(new Rectangle2D.Double(0, ry, Math.max(0, rx), rh));
+g.fill(new Rectangle2D.Double(rx + rw, ry, Math.max(0, DW - rx - rw), rh));
+}
+if (st.rect !== null) {
+const pulse = 0.55 + 0.45 * Math.sin(u.tsec * 4);
+g.setStroke(new BasicStroke(2.5));
+g.setColor(alpha(C_GOLD, 0.55 + 0.4 * pulse));
+g.draw(new RoundRectangle2D.Double(st.rect[0] - 4, st.rect[1] - 4, st.rect[2] + 8, st.rect[3] + 8, 12, 12));
+g.setStroke(new BasicStroke(1));
+}
+// the card
+const w = st.rect === null ? 560 : 400;
+const bodyH = wrapHeight(g, st.body, w - 36, F_S);
+const tryH = st.tryIt !== null ? wrapHeight(g, "Try it: " + st.tryIt, w - 36, F_XSB) + 10 : 0;
+const h = 66 + bodyH + tryH + 62;
+const p = Tutorial.place(st.rect, w, h);
+const x = p[0], y = p[1];
+Tutorial.card(g, x, y, w, h);
+u.hit(x, y, w, h, () => { }, null);
+label(g, "TUTORIAL  " + (Tutorial.step + 1) + " / " + l.length, x + 18, y + 22, C_GOLD);
+text(g, st.title, x + 18, y + 50, F_H3, Color.white);
+const cy = y + 70 + wrap(g, st.body, x + 18, y + 70, w - 36, F_S, C_TEXT);
+if (st.tryIt !== null) {
+const done = Tutorial.doneAt >= 0 || (met && Tutorial.condAtEntry);
+wrap(g, done ? "Done!" : "Try it: " + st.tryIt, x + 18, cy + 10, w - 36, F_XSB, done ? C_GOOD : C_GOLD);
+}
+const by = y + h - 46;
+const last = Tutorial.step === l.length - 1;
+u.button$9(g, x + w - 18 - 120, by, 120, 32, last ? "Start" : "Next", B_GOLD, () => Tutorial.go(u, Tutorial.step + 1), last ? "Close the tour and start campaigning." : null);
+if (Tutorial.step > 0) u.button$8(g, x + w - 18 - 120 - 90, by, 80, 32, "Back", B_NORM, () => Tutorial.go(u, Tutorial.step - 1));
+if (!last) u.button$9(g, x + 18, by, 110, 32, "Skip tour", B_GHOST, () => Tutorial.finish(u), "End the tour. Tips will still appear the first time each part of the game comes up.");
+}
+/** Puts the card beside the highlighted region, wherever it fits. */
+static place(r, w, h) {
+if (r === null) return [(DW - w) / 2, (DH - h) / 2];
+let x, y;
+if (r[0] + r[2] + 16 + w <= DW - 8) { x = r[0] + r[2] + 16; y = r[1]; }
+else if (r[0] - 16 - w >= 8) { x = r[0] - 16 - w; y = r[1]; }
+else if (r[1] + r[3] + 16 + h <= DH - 8) { x = r[0] + r[2] / 2 - w / 2; y = r[1] + r[3] + 16; }
+else { x = r[0] + r[2] / 2 - w / 2; y = r[1] - 16 - h; }
+if (r[3] < 80 && r[1] < 100) { y = r[1] + r[3] + 16; x = r[0] + r[2] / 2 - w / 2; }      // thin bars along the top: card goes underneath
+return [clamp(x, 8, DW - w - 8), clamp(y, 8, DH - h - 8)];
+}
+static card(g, x, y, w, h) {
+g.setColor(new Color(0, 0, 0, 120));
+g.fill(new RoundRectangle2D.Double(x + 4, y + 8, w, h, 14, 14));
+const rr = new RoundRectangle2D.Double(x, y, w, h, 14, 14);
+g.setPaint(new GradientPaint(x, y, rgb(0x1a2a46), x, (y + h), rgb(0x0e1830)));
+g.fill(rr);
+g.setColor(alpha(C_GOLD, 0.8));
+g.setStroke(new BasicStroke(1.4));
+g.draw(rr);
+g.setStroke(new BasicStroke(1));
+g.setColor(C_GOLD);
+g.fill(new RoundRectangle2D.Double(x + 18, y, 70, 4, 4, 4));
+}
+/** Which tip (if any) applies right now: [key, title, body, anchor]. */
+static currentTip(u) {
+const g = u.game;
+const m = u.modal;
+switch (u.screen) {
+case SC_SETUP:
+return ["setup", "Setting up your race", "New to the game? Try General election only on Easy: it's shorter. A full campaign starts two years out, the week after the 2026 midterms, and runs through the primaries. "
++ "Pick a scenario, then choose your candidate.", Tutorial.A_BOTCENTER];
+case SC_PICK:
+return ["pick", "Choosing a candidate", "Click a card to see a candidate's ratings, record, strengths and weaknesses. Edit platform tweaks their starting positions; the last card builds your own candidate; "
++ "the Independent tab runs outside the two parties. When you're happy, press Run as.", Tutorial.A_BOTCENTER];
+case SC_FIELD:
+if (FieldScreen.opponentsOnly)
+return ["field_ind", "Your opponents", "Click the Democrat and the Republican you'd like to face, or keep the likeliest nominees. Then press Start the campaign.", Tutorial.A_BOTCENTER];
+return ["field", "Who's running", "Optional: click candidates to keep them out of the race, and lock in the other party's nominee if you like. Or just press Start the campaign.", Tutorial.A_BOTCENTER];
+case SC_CREATE:
+return ["create", "Building a candidate", "Choose a look, a name, a home state and a party, then spend points on ratings (Unlimited lifts the cap). Hover over any rating to see what it does. Run as starts the campaign.", Tutorial.A_BOTCENTER];
+case SC_VP:
+return ["vp", "Choosing a running mate", "Each card shows the projected effect on your ticket nationally and in the running mate's home state. Vetting costs money but reveals scandal risk before reporters do.", Tutorial.A_BOTCENTER];
+case SC_NEGOT:
+return ["negot", "Debate negotiations", "Propose how many debates, when, whether there's a vice-presidential debate, the networks and the rules. Your opponent counters; strong debaters want more debates, weak ones fewer.", Tutorial.A_BOTCENTER];
+case SC_DEBATE: {
+const r = DebateView.run;
+if (r !== null && r !== undefined && r.myIdx >= 0)
+return ["debate", "Debate night", "For each question, pick an approach (keys 1-6), then the line you'll deliver (1-3). Approaches beat each other like rock-paper-scissors; your prep, charisma and intellect decide how well it lands. "
++ "If a rival comes after you, pick a response (1-4). The dial shows how a focus group reacts.", Tutorial.A_TOPRIGHT];
+return null;
+}
+case SC_NIGHT:
+return ["night", "Election Night", "States are called as the votes come in. Use the speed buttons to fast-forward, or End to jump to the final result.", Tutorial.A_BOTLEFT];
+case SC_RESULTS:
+return ["results", "Exploring the results", "Click any state for its vote, its swing since 2024, turnout and how each group voted. The tabs compare every state, every group, turnout and the races for Congress.", Tutorial.A_BOTCENTER];
+case SC_HQ: {
+if (g === null || g.me() === null) return null;
+if (m !== null && m.title !== null) {
+if (m.title.endsWith("drops out") && m.buttons !== null && m.buttons.length === 2)
+return ["endorse", "Fighting for an endorsement", "A rival has quit. The table shows where their voters are expected to go. Switch on offers - policy promises, a cabinet post, the vice-presidential slot, a convention speech - and watch your odds change. "
++ "Rivals are bidding too, and promises are binding.", Tutorial.A_TOP];
+if (m.title.startsWith("Primary night") || m.title.startsWith("Results:"))
+return ["primary", "Primary night", "Delegates are shared out by vote share (Democrats need 15% to win any; many later Republican contests are winner-take-all). Beating expectations brings momentum: money, press and voters follow.", Tutorial.A_TOP];
+if (m.title.startsWith("Your closing argument"))
+return ["closing", "The closing argument", "The last thing you want voters to hear. It builds every day you stick with it, and the fit score shows how well it suits you and the moment. Changing it later throws most of that away.", Tutorial.A_TOP];
+if (m.stacked && m.face !== null && m.buttons !== null && m.buttons.length >= 2 && !m.title.startsWith("When does"))
+return ["event", "Events", "The world intervenes. Pick a response: each one moves your platform and particular groups of voters, so there's rarely a free choice.", Tutorial.A_TOP];
+return null;
+}
+if (g.daily())
+return ["daily", "The final stretch", "Each turn is now a single day. Plan the day's three events (the rest of the week can wait), keep your closing argument steady and pour everything into turnout.", Tutorial.A_TOPRIGHT];
+return null;
+}
+default:
+return null;
+}
+}
+static tips(u, g, s) {
+const t = Tutorial.currentTip(u);
+if (t === null) return;
+const key = t[0];
+if (Tutorial.seen(s, key)) return;
+if (u.screen === SC_HQ && u.popup !== null) return;
+const title = t[1], body = t[2];
+const anchor = t[3];
+let w = (anchor === Tutorial.A_TOP || anchor === Tutorial.A_BOTCENTER) ? 640 : 430;
+// screens with a quiet corner of their own: put the tip there, clear of the controls
+const spot = key === "setup" ? [548, -1, 500] : key === "vp" ? [686, 572, 560]
+: key === "negot" ? [830, 420, 600] : key === "results" ? [1062, 560, 476] : null;
+if (spot !== null) w = spot[2];
+const bodyH = wrapHeight(g, body, w - 36, F_S);
+const h = 56 + bodyH + 54;
+let x, y;
+switch (anchor) {
+case Tutorial.A_TOP: x = (DW - w) / 2; y = 8; break;
+case Tutorial.A_TOPRIGHT: x = DW - w - 16; y = 96; break;
+case Tutorial.A_BOTLEFT: x = 48; y = DH - h - 60; break;
+default: x = (DW - w) / 2; y = DH - h - 76; break;
+}
+if (spot !== null) { x = spot[0]; if (spot[1] >= 0) y = spot[1]; }
+// a modal underneath: keep the tip clear of it
+if (u.modal !== null && anchor === Tutorial.A_TOP) y = 8;
+Tutorial.card(g, x, y, w, h);
+u.hit(x, y, w, h, () => { }, null);
+label(g, "TIP", x + 18, y + 22, C_GOLD);
+text(g, title, x + 54, y + 23, F_SB, Color.white);
+wrap(g, body, x + 18, y + 46, w - 36, F_S, C_TEXT);
+u.button$8(g, x + w - 18 - 100, y + h - 44, 100, 30, "Got it", B_GOLD, () => Tutorial.markSeen(s, key));
+u.button$9(g, x + 18, y + h - 44, 150, 30, "Turn off tips", B_GHOST, () => { s.tutorial = false; Tutorial.touring = false; }, "Switch the tutorial off for this campaign. You can replay the tour from Help.");
+}
+}
+Tutorial.touring = false;
+Tutorial.step = 0;
+Tutorial.condAtEntry = false;
+Tutorial.doneAt = -1;
+Tutorial.snapAct = null;
+Tutorial.snapSel = 0;
+Tutorial.snapMode = 0;
+Tutorial.snapRtab = 0;
+Tutorial.A_TOP = 0;
+Tutorial.A_TOPRIGHT = 1;
+Tutorial.A_BOTLEFT = 2;
+Tutorial.A_BOTCENTER = 3;
 class Battleground2028 extends JPanelBase {
 constructor() {
 super();
@@ -12767,6 +13100,7 @@ this.layer = 2;
 this.drawModal(g);
 this.layer = 0;
 }
+try { Tutorial.draw(this, g); } catch (ex) { console.error(ex); }
 if (((this.tip !== null) && (this.dragging === null))) { this.drawTip(g, this.tip); }
 g.setTransform(base);
 }
@@ -18741,6 +19075,8 @@ Briefing.TEXT = [
 "The left panel holds seven tabs: Schedule, Money, Field, Message, Polls, Campaign and News. The map sits in the middle with five views (six during the primaries). The right panel shows the selected state - or the nation when nothing is selected.",
 "#A good first week",
 "Fill the schedule (or press Auto-fill), pick a message frame on the Message tab, commission a poll in an early state, and open a field office or two where the first contests are. Then end the week and read the news.",
+"#The tutorial",
+"Tutorial: Learn to Play on the main menu (or the Guided tutorial switch when you set up a campaign) gives you a tour of headquarters on your first turn and a tip the first time you reach each part of the game. In a campaign, Take the guided tour on this screen replays the tour.",
 "#Staff",
 "Any part of the campaign can be handed to your staff (Campaign tab): they will schedule, buy ads, run the field program, poll and pick the message for you. Use it to focus on what you enjoy.",
 "#Keys",
@@ -18898,7 +19234,7 @@ function $boot() {
     });
     window.addEventListener('keyup', e => { if (code0(e) !== undefined) p.keyReleased(new KeyEventW(code0(e), 0)); });
     function code0(e) { return KEYS[e.key] !== undefined ? KEYS[e.key] : (e.key.length === 1 ? e.key.toUpperCase().charCodeAt(0) : undefined); }
-    window.__bg = { get app() { return APP; }, Screens, Hq, Night, Results, Week, Setup, Settings, candById, DebateView, Debates, Tabs, Creator, FieldScreen, Deals, Polls, Loading, SaveGame, Primary, Endorse };
+    window.__bg = { get app() { return APP; }, Tutorial, Screens, Hq, Night, Results, Week, Setup, Settings, candById, DebateView, Debates, Tabs, Creator, FieldScreen, Deals, Polls, Loading, SaveGame, Primary, Endorse };
     canvas.focus();
     resize();
     requestAnimationFrame(frame);

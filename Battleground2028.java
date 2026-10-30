@@ -13982,6 +13982,12 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
 
         interface Cond { boolean met(Battleground2028 u, Game g, Camp me); }
 
+        static boolean changed(int[] a, int[] b) {
+            if (a == null || b == null) return false;
+            for (int i = 0; i < Math.min(a.length, b.length); i++) if (a[i] != b[i]) return true;
+            return false;
+        }
+
         static Settings settings(Battleground2028 u) { return u.game != null && (u.screen != SC_SETUP && u.screen != SC_PICK && u.screen != SC_CREATE && u.screen != SC_FIELD && u.screen != SC_PLATFORM) ? u.game.set : u.setup; }
 
         static boolean on(Battleground2028 u) { Settings s = settings(u); return s != null && s.tutorial; }
@@ -14025,7 +14031,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                     "Three slots a day: morning, afternoon and evening. Rallies, town halls and other events happen in the state on the little button; podcasts, TV and call time happen from anywhere. "
                             + "The biggest podcasts only book candidates people have heard of. Long same-day flights wear the candidate out.",
                     new double[]{Hq.LX, Hq.TOP, Hq.LW, 484}, "click a slot and pick an event.",
-                    (uu, gg, m) -> uu.popup != null || snapAct != null && !Arrays.equals(snapAct, m.act)));
+                    (uu, gg, m) -> uu.popup != null || changed(snapAct, m.act)));
             l.add(new Step("The map",
                     "Click a state to work it: the right-hand panel switches to that state. Right-click a state to send the candidate there in the next free slot.",
                     new double[]{Hq.MX, Hq.MAPY, Hq.MW, Hq.MAPH}, "click a state.",
@@ -14133,11 +14139,16 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             if (met && !condAtEntry && doneAt < 0) doneAt = u.tsec;
             if (!met && condAtEntry) condAtEntry = false;
             if (doneAt >= 0 && u.tsec - doneAt > 0.9 && u.popup == null) { go(u, step + 1); return; }
-            // spotlight
-            Area dim = new Area(new Rectangle2D.Double(0, 0, DW, DH));
-            if (st.rect != null) dim.subtract(new Area(new RoundRectangle2D.Double(st.rect[0] - 4, st.rect[1] - 4, st.rect[2] + 8, st.rect[3] + 8, 12, 12)));
+            // spotlight: dim everything except the highlighted region
             g.setColor(new Color(2, 6, 14, st.rect == null ? 150 : 120));
-            g.fill(dim);
+            if (st.rect == null) g.fill(new Rectangle2D.Double(0, 0, DW, DH));
+            else {
+                double rx = st.rect[0] - 4, ry = st.rect[1] - 4, rw = st.rect[2] + 8, rh = st.rect[3] + 8;
+                g.fill(new Rectangle2D.Double(0, 0, DW, Math.max(0, ry)));
+                g.fill(new Rectangle2D.Double(0, ry + rh, DW, Math.max(0, DH - ry - rh)));
+                g.fill(new Rectangle2D.Double(0, ry, Math.max(0, rx), rh));
+                g.fill(new Rectangle2D.Double(rx + rw, ry, Math.max(0, DW - rx - rw), rh));
+            }
             if (st.rect != null) {
                 double pulse = 0.55 + 0.45 * Math.sin(u.tsec * 4);
                 g.setStroke(new BasicStroke(2.5f));
