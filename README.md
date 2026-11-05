@@ -41,6 +41,10 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
 - **Start on July 15** as the presumptive nominee, with the conventions still ahead.
 - **Primaries only:** play just the fight for the nomination. If no one wins a majority, you work a contested convention ballot by ballot: offer the vice-presidential slot, cabinet posts or platform deals, lobby the party leaders and rally the floor. Win and you can play on into the general.
 - **Three roles.** Play the candidate, or be the **campaign manager**: you run everything, but the candidate can refuse events, go off script and, if trust runs out, fire you. Or **watch the race** with pause, slow, normal and fast speeds and a skip to Election Night.
+- **Govern, 2029-2032.** Win and you can take the oath. Choose three priorities from your party's agenda, then fight one bill a quarter through Congress: party line, a watered-down bipartisan deal, budget reconciliation (once a year) or an executive order the courts may block. You can also try to end the filibuster. The economy, your approval and events (hurricanes, shutdowns, a Taiwan crisis, a Supreme Court vacancy, scandals) shift every quarter.
+- **The 2030 midterms run automatically:** the House vote follows your approval and the economy, and the 33 Senate seats up that year are decided state by state. Then you set new priorities for whatever Congress you have.
+- **Re-election in 2032** on the 2030 census map: survive a primary challenge if you're unpopular, pick your message, budget and three battleground states, play three debates and a closing argument, then watch Election Night.
+- **One year later:** an epilogue covering what your laws did (people insured, homes built, revenue raised), the economy, Congress and historians' early verdict. If you lose in 2028, it covers the new president's first year, the midterm outlook, and what's next for you.
 - **Run 100 elections** under your settings, general elections or full campaigns, and see each party's chances, the spread of electoral votes, how often each state flipped, the usual tipping-point state and who the nominees were.
 - **Your convention:** pick the platform's three priorities and settle two platform fights, choose four primetime speakers, and write your acceptance speech (opening, core argument, close). How well it plays sets your bounce.
 - **Press conferences** at a few big moments: the first votes, Super Tuesday, clinching, your convention, the first debate and the final weeks. Answer on substance, pivot, hit back or laugh it off.
@@ -51,7 +55,7 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
 - **Your running mate** gets three stops a week, and you play the vice-presidential debate yourself.
 - **Forecast:** win probability over time, the distribution of outcomes, the tipping-point state, and a clickable path-to-270 map.
 - **Chief of staff:** a note each week on what needs attention (you can switch it off).
-- **Final score, 24 achievements and a Hall of Fame** of your finished campaigns.
+- **Final score, 28 achievements and a Hall of Fame** of your finished campaigns.
 - **Election night by county:** watch all 3,100 counties report, with anchors calling states, flagging red mirages and checking in on the big counties.
 - **New faces from the midterms:** James Talarico, Roy Cooper, Sherrod Brown and Amy Klobuchar join the Democratic field, and the opening primary polls are updated to the late-2026 averages.
 - **The 2026 midterm results** feed the model: each state's Senate and governor margins, about 255 Democratic House seats, 54 Democratic senators and a D+13 national House vote.
@@ -111,7 +115,10 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
 | ![Who's running](screenshots/field.png) | ![Debate lines](screenshots/debate-lines.png) |
 | ![Issue polling](screenshots/issue-polling.png) | ![Ballot access](screenshots/ballot-access.png) |
 | ![Results explorer](screenshots/results.png) | ![The final stretch](screenshots/final-stretch.png) |
-| ![The tutorial](screenshots/tutorial.png) | |
+| ![The tutorial](screenshots/tutorial.png) | ![A contested convention](screenshots/contested-convention.png) |
+| ![Run 100 elections](screenshots/run-100.png) | ![Governing](screenshots/governing.png) |
+| ![The 2030 midterms](screenshots/midterms.png) | ![Re-election in 2032](screenshots/reelection.png) |
+| ![One year later](screenshots/epilogue.png) | |
 
 ## How the simulation works
 

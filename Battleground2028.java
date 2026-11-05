@@ -2221,7 +2221,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         double startEnv;                                // the national environment when the game began
         boolean recorded;                               // added to the hall of fame
         int contestPending = -1;                        // the party whose contested convention the player is about to play
-        int resumePhase = PH_PRIMARY;                   // primaries only: the phase to go back to if the player plays on
+        int resumePhase = PH_PRIMARY;
+        Term term;                                      // after Election Night: governing 2029-2032, or the year after a loss                   // primaries only: the phase to go back to if the player plays on
         double dApp, dUnemp, dInfl, dGdp, dRight;       // custom conditions: offsets from the scenario's path
         double[][] cellAdj, turnAdj;                    // custom conditions: logit shifts and turnout multipliers per state and cell
 
@@ -7174,7 +7175,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
     // =====================================================================
     static final int SC_HOME = 0, SC_SETUP = 1, SC_PICK = 2, SC_CREATE = 3, SC_HQ = 4, SC_DEBATE = 5, SC_NIGHT = 6,
             SC_END = 7, SC_BRIEF = 8, SC_VP = 9, SC_NEGOT = 10, SC_PLATFORM = 11, SC_FIELD = 12, SC_LOADING = 13, SC_RESULTS = 14, SC_CUSTOM = 15,
-            SC_CONVENTION = 16, SC_STAFF = 17, SC_ADS = 18, SC_FORECAST = 19, SC_HALL = 20, SC_CONTEST = 21, SC_BATCH = 22;
+            SC_CONVENTION = 16, SC_STAFF = 17, SC_ADS = 18, SC_FORECAST = 19, SC_HALL = 20, SC_CONTEST = 21, SC_BATCH = 22, SC_GOVERN = 23, SC_EPILOGUE = 24;
 
     static final String SANS = pickFont(new String[]{"Inter", "Segoe UI", "Helvetica Neue", "SF Pro Text", "Roboto", "Noto Sans",
             "Open Sans", "Lato", "DejaVu Sans", "Liberation Sans", "Arial"}, "SansSerif");
@@ -7412,6 +7413,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 case SC_HALL: Legacy.draw(this, g); break;
                 case SC_CONTEST: Contested.draw(this, g); break;
                 case SC_BATCH: Batch.draw(this, g); break;
+                case SC_GOVERN: Govern.draw(this, g); break;
+                case SC_EPILOGUE: Govern.epilogueScreen(this, g); break;
                 default: break;
             }
         } catch (RuntimeException ex) {
@@ -13336,6 +13339,14 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             u.button(g, 48, 832, 220, 44, "Main menu", B_GHOST, () -> u.go(SC_HOME));
             if (game.result != null) u.button(g, DW / 2 - 150, 832, 300, 44, "Explore the results", B_PRIMARY, () -> Results.open(u), "State by state, how every group swung since 2024, turnout and Congress.");
             u.button(g, DW - 48 - 260, 832, 260, 44, "New campaign", B_GOLD, () -> { u.setup = new Settings(); u.go(SC_SETUP); });
+            if (game.result != null && me != null && !game.set.primaryOnly) {
+                double bx = 900, bw = DW - 48 - 900;
+                if (won && game.set.role != ROLE_WATCH && (game.term == null || !game.term.lost2028))
+                    u.button(g, bx, 764, bw, 50, game.term != null ? "Back to the White House" : "Take the oath: govern 2029-2032", B_GOLD, () -> Govern.begin(u),
+                            "Set an agenda and fight for it in Congress, live with the 2030 midterms, then run for re-election in 2032.");
+                else if (!won || game.set.role == ROLE_WATCH)
+                    u.button(g, bx, 764, bw, 50, "One year later", B_PRIMARY, () -> Govern.oneYearLater(u), "What happened next: the new president's first year, and yours.");
+            }
         }
 
         static int debatesDone(Game g, Camp me) { int n = 0; for (Debate d : g.debates) if (d.done && d.party < 0 && !d.vp && d.participants.contains(me.idx)) n++; return n; }
@@ -13422,6 +13433,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 Hq.sel = g.me() != null && g.me().c.home >= 0 ? g.me().c.home : -1;
                 Hq.mapMode = g.phase <= PH_PRIMARY ? MM_CAL : MM_PUBLIC;
                 Hq.primCacheWeek = -1;
+                if (g.term != null) { u.go(g.term.stage == Govern.ST_DONE ? SC_EPILOGUE : SC_GOVERN); return; }
                 if (g.phase == PH_OVER && g.result != null) { Night.start(u); return; }
                 u.go(SC_HQ);
                 u.toast("Welcome back. " + weekStr(g.week) + ".", C_ACCENT);
@@ -16609,7 +16621,11 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 {"underdog", "Underdog", "Win when the national mood favoured the other party by 3 points or more at the start."},
                 {"fifty", "Fifty-state strategy", "Open field offices in 40 or more states."},
                 {"press", "Silver tongue", "Land six or more answers at press conferences."},
-                {"oratory", "Oratory", "Give a convention speech for the ages."}};
+                {"oratory", "Oratory", "Give a convention speech for the ages."},
+                {"reelected", "Four more years", "Win re-election in 2032."},
+                {"lawmaker", "Lawmaker", "Pass all three of your first-term priorities."},
+                {"midterm", "Defy history", "Keep your party's House majority through the 2030 midterms."},
+                {"beloved", "Beloved", "Finish your term with approval of 55% or more."}};
 
         static final String FILE = "hall.txt";
 
@@ -16682,6 +16698,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             if (win && me.party <= REP && g.startEnv * (me.party == DEM ? 1 : -1) <= -3) l.add("underdog");
             if (me.pressGood >= 6) l.add("press");
             if (me.convScore >= 0.85) l.add("oratory");
+            Govern.earned(g, l);
             return l;
         }
 
@@ -17640,6 +17657,1250 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             if (!running) u.button(g, DW - 48 - 300, 832, 300, 44, "Run another 100", B_GOLD, () -> start(u, mode));
         }
     }
+    // =====================================================================
+    //  42.  GOVERNING 2029-2032: THE AGENDA, THE MIDTERMS, RE-ELECTION AND ONE YEAR LATER
+    // =====================================================================
+    /** A bill on a president's agenda. */
+    static final class Pol {
+        final int party, fmt;                       // fmt: 0 whole number, 1 one decimal, 2 a fixed number
+        final String name, desc, impact;
+        final double support, unity, cross, gdp, unemp, infl, base;
+        final boolean recon, exec;
+
+        Pol(int party, String name, String desc, double support, double unity, double cross, boolean recon, boolean exec,
+            double gdp, double unemp, double infl, String impact, double base, int fmt) {
+            this.party = party; this.name = name; this.desc = desc; this.support = support; this.unity = unity; this.cross = cross;
+            this.recon = recon; this.exec = exec; this.gdp = gdp; this.unemp = unemp; this.infl = infl; this.impact = impact; this.base = base; this.fmt = fmt;
+        }
+    }
+
+    static final class Bill implements Serializable {
+        private static final long serialVersionUID = 1L;
+        int id;                                     // index into Govern.POL
+        int status;                                 // 0 not yet, 1 law, 2 failed, 3 executive order, 4 blocked by the courts
+        int quarter = -1, tries;
+        double strength;                            // 1 the full bill; less for a deal or an executive order
+        boolean priority, second;
+    }
+
+    static final class Term implements Serializable {
+        private static final long serialVersionUID = 1L;
+        int party, list, oppParty = -1;             // the president's party; whose agenda; the 2032 challenger's party
+        String presName = "", presLast = "", presId, vpName = "", oppName = "", oppLast = "", oppId, challenger;
+        int q, stage;                               // q: 0 = winter 2029 ... 15 = fall 2032
+        double approval, unemp, inflation, gdp, approval0, unemp0, inflation0, gdp0, shock;
+        int houseD, senateD, houseD0, senateD0, houseD30 = -1, senateD30 = -1, houseD32 = -1, senateD32 = -1;
+        boolean filibusterGone, voted, lost2028, reelected, recorded, ai;
+        int reconYear = -1, capital = 2, pick = -1, approach, focus = 1, flags, lastH, lastS;
+        boolean goPublic;
+        List<Bill> bills = new ArrayList<Bill>();
+        List<String> log = new ArrayList<String>();
+        double[] appHist = new double[24];
+        int nHist;
+        double[] m28 = new double[NS], w28 = new double[NS], sen30, sen32, m32;
+        double nat28, pm28, partyBuild, warChest, enthusiasm, midMargin, primaryHit, pollErr;
+        int theme, budget, closing, debatesHeld, ev32P, ev32O, partisan;
+        int[] debate = new int[3];
+        double[] debScore = new double[3];
+        boolean[] focusSt = new boolean[NS];
+        double nat32, pop32P;
+        List<String[]> epi = new ArrayList<String[]>();
+        Term next;                                  // whoever governs in the year after (the epilogue's first year)
+    }
+
+    static final class Govern {
+        static final int ST_AGENDA = 0, ST_DESK = 1, ST_MIDTERM = 2, ST_AGENDA2 = 3, ST_CAMP1 = 4, ST_CAMP2 = 5, ST_NIGHT = 6, ST_DONE = 7;
+        static final int AP_LINE = 0, AP_DEAL = 1, AP_RECON = 2, AP_EXEC = 3, PICK_FILIBUSTER = 99;
+        static final String[] SEASON = {"Winter", "Spring", "Summer", "Fall"};
+        static final String[] APPROACH = {"Party line", "Bipartisan deal", "Reconciliation", "Executive action"};
+        static final String[] FOCUS = {"The economy", "On the road", "World stage", "Party building"};
+        static final String[] THEME = {"Run on the record", "Draw the contrast", "The next four years"};
+        static final String[] BUDGET = {"Air war", "Ground game", "Balanced", "Digital first"};
+        static final String[] CLOSING = {"The economy", "Steady leadership", "Fight for the future"};
+        static final String[] DEBATE = {"Defend the record", "Attack their plan", "Talk about the future", "Go for the zinger"};
+        static final String CLASS1 = "AZ:D CA:D CT:D DE:D FL:R HI:D IN:R ME:D MD:D MA:D MI:D MN:D MS:R MO:R MT:R NE:R NV:D NJ:D NM:D NY:D ND:R OH:R PA:R RI:D TN:R TX:R UT:R VT:D VA:D WA:D WV:R WI:D WY:R";
+        static final String CLASS2 = "AL:R AK:R AR:R CO:D DE:D GA:D ID:R IL:D IA:R KS:R KY:R LA:R ME:R MA:D MI:D MN:D MS:R MT:R NE:R NH:D NJ:D NM:D NC:R OK:R OR:D RI:D SC:R SD:R TN:R TX:R VA:D WV:R WY:R";
+        static double nightT0 = -1;
+        static boolean nightAll;
+
+        static final Pol[] POL = {
+                new Pol(DEM, "Lower Costs Act", "Caps insulin at $35 a month and child care at 7% of income, and bans junk fees.", 66, 0.95, 0.2, true, false, 0.05, 0, -0.15, "Families with young children save about $# a year on child care.", 3100, 0),
+                new Pol(DEM, "A public option", "A government health plan on the ACA marketplaces in every state.", 58, 0.86, 0.04, true, false, 0, 0, -0.05, "# million more Americans have health insurance.", 4.6, 1),
+                new Pol(DEM, "Restore Roe", "The Women's Health Protection Act: abortion rights written into federal law.", 60, 0.97, 0.03, false, false, 0, 0, 0, "Abortion is legal through viability in every state; # states had banned it.", 13, 2),
+                new Pol(DEM, "Immigration reform", "Border security money plus a path to citizenship for Dreamers and long-time workers.", 61, 0.86, 0.28, false, true, 0.1, 0, 0, "# million Dreamers and long-time residents are on a path to citizenship.", 2.4, 1),
+                new Pol(DEM, "Billionaire minimum tax", "A 25% minimum tax on households worth more than $100 million.", 63, 0.88, 0.02, true, false, -0.03, 0, -0.05, "The minimum tax raises about $# billion a year.", 50, 0),
+                new Pol(DEM, "Build 3 million homes", "Zoning incentives, a builders' tax credit and federal land for housing.", 66, 0.9, 0.35, true, false, 0.12, -0.05, -0.08, "# million new homes are under construction.", 1.1, 1),
+                new Pol(DEM, "AI safety standards", "Safety testing for the most powerful AI models, and data centers pay their own power bills.", 63, 0.92, 0.3, false, true, -0.02, 0, 0, "# frontier AI labs submit their models for federal safety testing.", 9, 0),
+                new Pol(DEM, "Protect Social Security", "Lift the payroll-tax cap and raise benefits for the oldest retirees.", 68, 0.93, 0.08, false, false, 0, 0, 0, "Social Security's trust fund is solvent for # more years.", 30, 0),
+                new Pol(DEM, "Gun safety", "Universal background checks, red-flag laws and a minimum age of 21 for assault weapons.", 58, 0.84, 0.06, false, true, 0, 0, 0, "Background checks cover # million more gun sales a year.", 6, 1),
+                new Pol(DEM, "Clean energy buildout", "New transmission lines, permitting reform and clean-power tax credits.", 55, 0.86, 0.15, true, true, 0.15, -0.05, 0.02, "# gigawatts of new clean power are on the grid.", 120, 0),
+                new Pol(DEM, "Voting rights", "The Freedom to Vote Act: national standards for early voting and mail ballots.", 60, 0.96, 0.02, false, false, 0, 0, 0, "# states have had to expand early voting.", 19, 2),
+                new Pol(DEM, "Chips and China Act", "Chips, shipbuilding and export controls to compete with China.", 64, 0.9, 0.55, false, false, 0.1, -0.03, 0.03, "# new chip and shipbuilding plants are under way.", 14, 0),
+                new Pol(DEM, "Paid leave", "Twelve weeks of paid family and medical leave for every worker.", 70, 0.9, 0.08, true, false, 0.02, 0, 0.03, "# million workers took paid leave in its first year.", 11, 1),
+                new Pol(DEM, "Supreme Court term limits", "18-year terms for justices, two appointments per presidential term.", 58, 0.82, 0.02, false, false, 0, 0, 0, "The first justice with an 18-year term joins the Court in #.", 2035, 2),
+                new Pol(REP, "Make the tax cuts bigger", "Extend the 2025 tax cuts and cut the corporate rate to 15%.", 45, 0.96, 0.04, true, false, 0.18, -0.05, 0.12, "The typical family pays about $# less in federal income tax.", 1500, 0),
+                new Pol(REP, "Finish the wall", "Money for the border wall, more ICE agents and faster deportations.", 48, 0.94, 0.05, true, true, -0.05, 0, 0.05, "Border crossings are down #% from their 2028 level.", 40, 0),
+                new Pol(REP, "Health freedom act", "Replace ACA subsidies with health savings accounts and state block grants.", 39, 0.85, 0.02, true, false, 0.03, 0, 0, "# million fewer Americans have health insurance.", 5.2, 1),
+                new Pol(REP, "A 15-week abortion limit", "A national limit on abortion after 15 weeks, with exceptions.", 41, 0.78, 0.02, false, false, 0, 0, 0, "Abortion is limited after 15 weeks nationwide, including in # states that had allowed it.", 24, 2),
+                new Pol(REP, "Reciprocal tariffs", "Match every country's tariffs, with a 60% floor on Chinese goods.", 42, 0.83, 0.08, false, true, -0.15, 0.08, 0.35, "Tariffs bring in about $# billion a year, and prices on imported goods are up.", 220, 0),
+                new Pol(REP, "Energy dominance", "Open federal lands and waters to drilling and speed up permits for pipelines.", 53, 0.96, 0.22, true, true, 0.1, -0.03, -0.12, "US oil and gas output is up #%.", 9, 0),
+                new Pol(REP, "Balance the budget", "Cap spending and cut federal agencies by a tenth.", 51, 0.82, 0.05, true, false, -0.12, 0.08, -0.15, "Federal spending is $# billion a year lower than planned.", 180, 0),
+                new Pol(REP, "School choice", "A federal tax credit for private-school and home-school scholarships.", 52, 0.9, 0.08, true, false, 0, 0, 0, "# million children use the new scholarships.", 1.8, 1),
+                new Pol(REP, "Back the blue", "Money for 100,000 police officers and tougher sentences for fentanyl dealers.", 57, 0.96, 0.3, false, false, 0, 0, 0, "# thousand new police officers are on the street.", 60, 0),
+                new Pol(REP, "Decouple from China", "Ban investment in Chinese tech and bring medicine supply chains home.", 61, 0.92, 0.5, false, true, -0.05, 0, 0.1, "#% of America's generic medicines are now made in North America.", 35, 0),
+                new Pol(REP, "AI dominance act", "Override state AI laws and fast-track data centers on federal land.", 42, 0.82, 0.18, false, true, 0.12, 0.03, 0, "# new data centers are under construction on federal land.", 40, 0),
+                new Pol(REP, "Open up housing", "Sell federal land for homes and cut building regulations.", 58, 0.9, 0.3, true, true, 0.08, -0.03, -0.05, "# million new homes are under construction.", 0.9, 1),
+                new Pol(REP, "The SAVE Act", "Proof of citizenship to register and photo ID to vote.", 63, 0.97, 0.05, false, false, 0, 0, 0, "Every state now requires photo ID to vote; # did not before.", 15, 2),
+                new Pol(REP, "No tax on tips and overtime", "Make the tax break on tips and overtime permanent and wider.", 66, 0.96, 0.4, true, false, 0.05, 0, 0.05, "Workers keep about $# billion a year in tips and overtime pay.", 40, 0)};
+
+        static String when(int q) { return SEASON[q % 4] + " " + (2029 + q / 4); }
+        static int year(int q) { return 2029 + q / 4; }
+        static String plural(int p) { return p == DEM ? "Democrats" : p == REP ? "Republicans" : "independents"; }
+        static int ownH(Term t) { return t.list == DEM ? t.houseD : 435 - t.houseD; }
+        static int ownS(Term t) { return t.list == DEM ? t.senateD : 100 - t.senateD; }
+        static double norm(double z) { return 1 / (1 + Math.exp(-1.702 * z)); }
+        static void log(Term t, String s) { t.log.add(when(Math.min(t.q, 15)) + ": " + s); }
+
+        static String impact(Pol p, double strength) {
+            double v = p.fmt == 2 ? p.base : p.base * strength;
+            String n = p.fmt == 1 ? fmt1(v) : p.fmt == 2 ? String.valueOf((int) Math.round(v)) : thousands(Math.round(v));
+            return p.impact.replace("#", n);
+        }
+
+        // ---------------------------------------------------------------- a new administration
+        static Term start(Game g, Camp k) {
+            Term t = new Term();
+            t.party = k.party;
+            t.list = k.party == DEM || k.party == REP ? k.party : (k.c.econ + k.c.cult <= 0 ? DEM : REP);
+            t.presName = k.name(); t.presLast = k.last(); t.presId = k.c.id;
+            Cand vp = g.vpOf(k.party);
+            t.vpName = vp != null ? vp.name() : "";
+            double tot = Math.max(1, g.popD + g.popR + g.popO);
+            t.nat28 = (g.popD - g.popR) / tot * 100;
+            for (int s = 0; s < NS; s++) { t.m28[s] = Vote.margin(g.result[s]); t.w28[s] = g.result[s][0] + g.result[s][1] + g.result[s][2]; }
+            t.pm28 = Legacy.myMargin(g, k);
+            t.approval = t.approval0 = clamp(52 + 0.45 * t.pm28, 44, 61);
+            t.unemp = t.unemp0 = g.unemp; t.inflation = t.inflation0 = g.inflation; t.gdp = t.gdp0 = g.gdp;
+            t.houseD = t.houseD0 = g.houseSeatsD >= 0 ? g.houseSeatsD : (int) Math.round(g.houseD);
+            t.senateD = t.senateD0 = General.senateSeats(g);
+            for (int i = 0; i < POL.length; i++) if (POL[i].party == t.list) { Bill b = new Bill(); b.id = i; t.bills.add(b); }
+            t.appHist[t.nHist++] = t.approval;
+            t.stage = ST_AGENDA;
+            log(t, t.presName + " takes the oath of office. Approval " + Math.round(t.approval) + "%.");
+            return t;
+        }
+
+        /** The winner of an election the player lost, governing on autopilot. */
+        static Term successor(Game g, int party, String name, String last, Term prior, int houseD, int senateD, double unemp, double infl, double gdp, double popMargin, int q0) {
+            Term t = new Term();
+            t.ai = true;
+            t.party = party;
+            t.list = party == DEM || party == REP ? party : DEM;
+            t.presName = name; t.presLast = last;
+            t.approval = t.approval0 = clamp(52 + 0.45 * popMargin, 44, 61);
+            t.unemp = t.unemp0 = unemp; t.inflation = t.inflation0 = infl; t.gdp = t.gdp0 = gdp;
+            t.houseD = t.houseD0 = houseD; t.senateD = t.senateD0 = senateD;
+            t.q = q0;
+            for (int i = 0; i < POL.length; i++) if (POL[i].party == t.list) {
+                Bill b = new Bill(); b.id = i;
+                if (prior != null && prior.list == t.list) for (Bill x : prior.bills) if (x.id == i && (x.status == 1 || x.status == 3)) { b.status = x.status; b.strength = x.strength; b.quarter = x.quarter; }
+                t.bills.add(b);
+            }
+            aiPriorities(g, t);
+            t.appHist[t.nHist++] = t.approval;
+            t.stage = ST_DESK;
+            for (int i = 0; i < 4; i++) aiQuarter(g, t);
+            return t;
+        }
+
+        static int priorities(Term t, boolean second) { int n = 0; for (Bill b : t.bills) if (b.priority && b.second == second) n++; return n; }
+        static int laws(Term t) { int n = 0; for (Bill b : t.bills) if (b.status == 1 || b.status == 3) n++; return n; }
+
+        static boolean reconOk(Term t, Pol p) { return p.recon && t.reconYear != year(t.q); }
+
+        /** Expected votes and the chance of passing: {house yes, house sd, senate yes, senate sd, senate votes needed, probability}. */
+        static double[] whip(Term t, Pol p, int ap, boolean pub) {
+            double own = p.unity, oth = p.cross;
+            if (ap == AP_DEAL) {
+                double dealable = clamp(p.cross * 3, 0, 1);
+                boolean divided = ownH(t) < 218 || ownS(t) < 50;
+                own = Math.min(0.99, own + 0.03);
+                oth = Math.min(0.85, oth + (divided ? 0.18 : 0.3) * dealable);
+            }
+            oth *= Math.max(0.5, 1 - 0.07 * t.partisan);   // every party-line win makes the other side less willing
+            if (pub) { own = Math.min(0.995, own + 0.025); oth = Math.min(0.9, oth + 0.03); }
+            double ap2 = (t.approval - 46) * 0.004;
+            if (t.q >= 12) oth *= 0.6;                  // an election year: few want to hand the president a win
+            own = clamp(own + ap2 * 0.5, 0.3, 0.995);
+            oth = clamp(oth + ap2, 0, 0.9);
+            if (t.party != t.list) { own *= 0.88; oth = Math.min(0.9, oth + 0.08); }
+            int oh = ownH(t), os = ownS(t);
+            double eH = oh * own + (435 - oh) * oth, eS = os * own + (100 - os) * oth;
+            double sdH = Math.sqrt(oh * own * (1 - own) + (435 - oh) * oth * (1 - oth)) + 2.5;
+            double sdS = Math.sqrt(os * own * (1 - own) + (100 - os) * oth * (1 - oth)) + 0.9;
+            double need = t.filibusterGone || ap == AP_RECON ? 50 : 60;
+            // an opposition majority controls the floor: it only takes up bills its own members want
+            double blocked = ap == AP_EXEC ? 0 : oh < 218 && oth < 0.3 ? 1 : os < 50 && oth < 0.25 ? 2 : 0;
+            double pr = ap == AP_EXEC ? 1 : blocked > 0 ? 0 : norm((eH - 217.5) / sdH) * norm((eS - need + 0.5) / sdS);
+            return new double[]{eH, sdH, eS, sdS, need, pr, blocked};
+        }
+
+        static boolean available(Term t, Pol p, int ap) {
+            if (ap == AP_RECON) return reconOk(t, p);
+            if (ap == AP_EXEC) return p.exec;
+            return true;
+        }
+
+        static double filibusterOdds(Term t) {
+            int os = ownS(t);
+            if (os < 50 || t.party != t.list) return 0;
+            double e = os * 0.93, sd = Math.sqrt(os * 0.93 * 0.07) + 0.6;
+            return norm((e - 49.5) / sd);
+        }
+
+        /** Push a bill (or the filibuster) through Congress. Returns true if it became law. */
+        static boolean act(Game g, Term t, int pick, int ap, boolean pub) {
+            Random r = g.rng;
+            t.voted = true;
+            if (pub && t.capital > 0) t.capital--; else pub = false;
+            if (pick == PICK_FILIBUSTER) {
+                int os = ownS(t);
+                int yes = 0;
+                for (int i = 0; i < os; i++) if (r.nextDouble() < 0.93) yes++;
+                t.lastH = -1; t.lastS = yes;
+                if (yes >= 50) { t.filibusterGone = true; t.approval -= 0.8; t.enthusiasm += 0.6; log(t, "The Senate ends the legislative filibuster, " + yes + " votes to " + (100 - yes) + ". Bills now need only a majority."); return true; }
+                t.approval -= 0.6;
+                log(t, "The push to end the filibuster fails: " + (os - yes) + " senators of your own party vote no.");
+                return false;
+            }
+            Bill b = t.bills.get(pick);
+            Pol p = POL[b.id];
+            b.tries++;
+            if (ap == AP_EXEC) {
+                b.status = 3; b.strength = 0.45; b.quarter = t.q;
+                t.approval += (p.support - 50) * 0.02 + 0.1;
+                log(t, "By executive order: " + p.name + ". It will face challenges in court.");
+                return true;
+            }
+            double[] w = whip(t, p, ap, pub);
+            if (w[6] > 0) {
+                b.status = 2;
+                t.approval -= 0.3;
+                t.lastH = -1; t.lastS = -1;
+                log(t, (w[6] == 1 ? "The Speaker" : "The Senate majority leader") + " refuses to bring " + p.name + " to the floor.");
+                return false;
+            }
+            int h = (int) Math.round(clamp(w[0] + r.nextGaussian() * w[1], 0, 435)), s = (int) Math.round(clamp(w[2] + r.nextGaussian() * w[3], 0, 100));
+            t.lastH = h; t.lastS = s;
+            boolean pass = h >= 218 && s >= w[4];
+            if (ap == AP_RECON) t.reconYear = year(t.q);
+            if (pass) {
+                b.status = 1; b.quarter = t.q; b.strength = ap == AP_DEAL ? 0.6 : 1;
+                if (ap != AP_DEAL) t.partisan++;
+                t.approval += (p.support - 50) * 0.05 * b.strength + 0.4;
+                t.enthusiasm += ap == AP_DEAL ? -0.3 : b.priority ? 0.5 : 0.2;
+                log(t, p.name + (ap == AP_DEAL ? " passes as a bipartisan compromise" : " passes") + ": House " + h + "-" + (435 - h) + ", Senate " + s + "-" + (100 - s) + ". The president signs it.");
+                snd(Sfx.CHEER);
+            } else {
+                b.status = 2;
+                t.approval -= b.priority ? 0.9 : 0.5;
+                String why = h < 218 ? "dies in the House, " + h + "-" + (435 - h) : s >= 50 && w[4] > 50 ? "is filibustered: " + s + " senators vote to end debate, " + (int) w[4] + " needed" : "fails in the Senate, " + s + "-" + (100 - s);
+                log(t, p.name + " " + why + ".");
+            }
+            return pass;
+        }
+
+        // ---------------------------------------------------------------- the quarter turns over
+        static void endQuarter(Game g, Term t) {
+            Random r = g.rng;
+            // how the president spent the quarter
+            if (t.focus == 0) { t.approval += t.unemp > 5 || t.inflation > 3 ? 0.6 : 0.2; t.gdp += 0.1; }
+            if (t.focus == 1) { t.approval += 0.7; t.partyBuild += 0.2; }
+            if (t.focus == 2) { t.approval += 0.3; }
+            if (t.focus == 3) { t.partyBuild += 1; if (t.q >= 8) t.warChest += 1; }
+            // the economy drifts toward where policy points it
+            double gT = 2.0, uT = 4.5, iT = 2.5;
+            for (Bill b : t.bills) if (b.status == 1 || b.status == 3) { Pol p = POL[b.id]; gT += p.gdp * b.strength; uT += p.unemp * b.strength; iT += p.infl * b.strength; }
+            if (t.shock == 0 && r.nextDouble() < 0.05) { t.shock = 3.0; log(t, "The economy tips into recession."); }
+            t.gdp += (gT - t.shock - t.gdp) * 0.35 + r.nextGaussian() * 0.55;
+            t.unemp += (uT + t.shock * 0.5 - t.unemp) * 0.25 - (t.gdp - 2) * 0.06 + r.nextGaussian() * 0.15;
+            t.inflation += (iT - t.inflation) * 0.3 + r.nextGaussian() * 0.25;
+            t.shock = t.shock < 0.3 ? 0 : t.shock * 0.55;
+            t.gdp = clamp(t.gdp, -5, 6); t.unemp = clamp(t.unemp, 3, 11); t.inflation = clamp(t.inflation, -0.5, 9);
+            // approval follows the economy, with the honeymoon fading
+            double target = 45 + 1.6 * (t.gdp - 2) - 1.4 * (t.unemp - 4.5) - 1.2 * (t.inflation - 2.5);
+            t.approval += (target - t.approval) * 0.3 + r.nextGaussian() * 1.0;
+            t.approval = clamp(t.approval, 26, 70);
+            t.enthusiasm *= 0.9;
+            t.capital = Math.min(3, t.capital + 1);
+            t.voted = false;
+            t.goPublic = false;
+            if (t.nHist < t.appHist.length) t.appHist[t.nHist++] = t.approval;
+            t.q++;
+            if (t.q == 8 && t.houseD30 < 0) midterm(g, t);
+            if (t.q == 12 && !t.ai) primaryCheck(g, t);
+            if (t.q == 14 && !t.ai) { t.stage = ST_CAMP1; opponent(g, t); }
+        }
+
+        static void primaryCheck(Game g, Term t) {
+            if (t.approval >= 41) return;
+            Cand best = null;
+            double bv = -1;
+            for (Cand c : ROSTER) if (c.party == t.party && !c.id.equals(t.presId) && !c.custom) { double v = c.a[A_CHA] + c.a[A_BAS] + g.rng.nextDouble() * 30; if (v > bv) { bv = v; best = c; } }
+            if (best == null) return;
+            t.challenger = best.name();
+            t.primaryHit = (41 - t.approval) * 0.2;
+            t.approval -= 1;
+            log(t, best.name() + " challenges you for the " + PARTY[t.party] + " nomination. You win the primaries, but the fight leaves scars.");
+        }
+
+        // ---------------------------------------------------------------- the 2030 midterms
+        static double lean28(Term t, int s) { return t.m28[s] - t.nat28; }
+
+        static int seatsD(double marginD, Random r) { return clampi((int) Math.round(210 + 3.8 * marginD + r.nextGaussian() * 5), 120, 330); }
+
+        static void midterm(Game g, Term t) {
+            Random r = g.rng;
+            double mP = 0.5 * (t.approval - 50) - 2.5 + 0.4 * (t.gdp - 2) - 0.3 * (t.unemp - 4.5) + 0.3 * Math.min(4, t.partyBuild) + 0.4 * t.enthusiasm + r.nextGaussian() * 1.8;
+            t.midMargin = mP;
+            double natD = t.party == DEM ? mP : t.party == REP ? -mP : (t.nat28 * 0.3 + r.nextGaussian() * 3);
+            t.houseD30 = seatsD(natD, r);
+            t.sen30 = new double[NS];
+            Arrays.fill(t.sen30, Double.NaN);
+            int dUp = 0, dWon = 0;
+            for (String tok : CLASS1.split(" ")) {
+                String[] p = tok.split(":");
+                int s = stateIdx(p[0]);
+                boolean dHeld = p[1].equals("D");
+                if (dHeld) dUp++;
+                double m = lean28(t, s) + natD + (dHeld ? 3 : -3) + r.nextGaussian() * 3.5;
+                t.sen30[s] = m;
+                if (m > 0) dWon++;
+            }
+            t.senateD30 = clampi(t.senateD - dUp + dWon, 0, 100);
+            int hB = ownH(t), sB = ownS(t);
+            t.houseD = t.houseD30; t.senateD = t.senateD30;
+            log(t, "Midterms: the " + (t.party == IND ? "national House vote" : "president's party") + " " + (t.party == IND ? margin(natD) : (mP >= 0 ? "wins the House vote by " : "loses the House vote by ") + fmt1(Math.abs(mP)) + " points") + ". "
+                    + (t.party == IND ? "" : plural(t.list) + " go from " + hB + " to " + ownH(t) + " House seats and from " + sB + " to " + ownS(t) + " senators."));
+            t.stage = ST_MIDTERM;
+            t.capital = 2;
+            t.partyBuild = 0;
+        }
+
+        // ---------------------------------------------------------------- 2032
+        static void opponent(Game g, Term t) {
+            Random r = g.rng;
+            t.oppParty = t.party == DEM ? REP : t.party == REP ? DEM : (t.houseD >= 218 ? DEM : REP);
+            Camp last = g.nominee(t.oppParty);
+            Cand best = null;
+            double bv = -1;
+            for (Cand c : ROSTER) {
+                if (c.party != t.oppParty || c.custom) continue;
+                if (last != null && c.id.equals(last.c.id) && !(Math.abs(t.pm28) < 2.5 && r.nextDouble() < 0.4)) continue;
+                double v = c.a[A_CHA] + c.a[A_DEB] + c.a[A_SPE] + c.a[A_EST] * 0.5 + r.nextDouble() * 70;
+                if (v > bv) { bv = v; best = c; }
+            }
+            if (best == null) best = last != null ? last.c : ROSTER.get(0);
+            t.oppId = best.id; t.oppName = best.name(); t.oppLast = best.last;
+            t.pollErr = r.nextGaussian() * 1.5;
+            t.theme = t.approval >= 48 ? 0 : t.approval >= 44 ? 1 : 2;
+            t.budget = 2;
+            t.closing = t.gdp > 2.5 ? 0 : 1;
+            for (int i = 0; i < 3; i++) t.debate[i] = 0;
+            List<Integer> bg = battlegrounds(t);
+            for (int i = 0; i < Math.min(3, bg.size()); i++) t.focusSt[bg.get(i)] = true;
+            log(t, best.name() + " wins the " + PARTY[t.oppParty] + " nomination to take you on.");
+        }
+
+        static Cand opp(Term t) { return t.oppId != null ? candById(t.oppId) : null; }
+
+        static double themeEff(Term t) {
+            if (t.theme == 0) return t.approval >= 50 ? 1.0 : t.approval >= 45 ? 0.3 : -0.8;
+            if (t.theme == 1) return 0.6;
+            return t.approval < 45 ? 0.9 : 0.4;
+        }
+
+        static double budgetNat(Term t) { return new double[]{0.35, 0.1, 0.2, 0.3}[t.budget]; }
+        static double budgetFocus(Term t) { return new double[]{1.2, 2.1, 1.6, 1.3}[t.budget]; }
+        static double closingEff(Term t) { return t.closing == 0 ? clamp(0.5 * (t.gdp - 2), -1, 1) : t.closing == 1 ? 0.4 : 0.3 + 0.2 * t.enthusiasm; }
+
+        /** The incumbent's expected national margin, before Election Day's surprises. */
+        static double projection(Term t) {
+            Cand o = opp(t);
+            double oq = o == null ? 0 : (o.a[A_CHA] + o.a[A_DEB] + o.a[A_SPE] - 195) * 0.03;
+            double m = 0.55 * (t.approval - 47) + 0.7 * (t.gdp - 2) - 0.5 * (t.unemp - 4.5) - 0.45 * (t.inflation - 2.5) + 1.5
+                    + themeEff(t) + budgetNat(t) + 0.25 * Math.min(4, t.warChest) - t.primaryHit - oq;
+            for (int i = 0; i < t.debatesHeld; i++) m += 0.3 * t.debScore[i];
+            if (t.stage >= ST_CAMP2) m += closingEff(t);
+            return m;
+        }
+
+        static double natD(Term t, double incMargin) { return t.party == DEM ? incMargin : t.party == REP ? -incMargin : incMargin; }
+
+        /** Projected state margins (D minus R, or the president minus the challenger for an independent). */
+        static double stateMargin(Term t, int s, double incMargin) {
+            double lean = t.party == IND ? -Math.abs(lean28(t, s)) * 0.3 : lean28(t, s) * 0.9;
+            double m = lean + natD(t, incMargin);
+            if (t.focusSt[s]) m += (t.party == REP ? -1 : 1) * budgetFocus(t);
+            return m;
+        }
+
+        static int[] ev2030() {
+            int[] ev = new int[NS];
+            for (int s = 0; s < NS; s++) ev[s] = Custom.ev0 != null ? Custom.ev0[s] : STATES[s].ev;
+            for (String tok : Custom.EV2030.split(" ")) { String[] p = tok.split(":"); int k = stateIdx(p[0]); ev[k] += Integer.parseInt(p[1]); }
+            return ev;
+        }
+
+        static boolean mine(Term t, double m) { return t.party == REP ? m < 0 : m > 0; }
+
+        static List<Integer> battlegrounds(Term t) {
+            List<Integer> l = new ArrayList<Integer>();
+            final double pm = projection(t) + t.pollErr;
+            for (int s = 0; s < NS; s++) l.add(s);
+            final Term tt = t;
+            Collections.sort(l, (a, b) -> Double.compare(Math.abs(stateMargin(tt, a, pm) - (tt.focusSt[a] ? (tt.party == REP ? -1 : 1) * budgetFocus(tt) : 0)),
+                    Math.abs(stateMargin(tt, b, pm) - (tt.focusSt[b] ? (tt.party == REP ? -1 : 1) * budgetFocus(tt) : 0))));
+            List<Integer> out = new ArrayList<Integer>();
+            int[] ev = ev2030();
+            for (int s : l) { if (ev[s] >= 4) out.add(s); if (out.size() >= 10) break; }
+            return out;
+        }
+
+        static void holdDebate(Game g, Term t, int i) {
+            if (i != t.debatesHeld || i > 2) return;
+            Random r = g.rng;
+            Cand me = candById(t.presId), o = opp(t);
+            double myDeb = me != null ? me.a[A_DEB] : 60, oDeb = o != null ? o.a[A_DEB] : 60, cha = me != null ? me.a[A_CHA] : 60;
+            int a = t.debate[i];
+            double fit = a == 0 ? (t.approval >= 48 ? 0.6 : -0.4) : a == 1 ? 0.3 : a == 2 ? (t.approval < 48 ? 0.5 : 0.2) : (cha - 60) / 40.0 + r.nextGaussian() * 1.2;
+            double sc = (myDeb - oDeb) / 20.0 + fit * 0.7 + r.nextGaussian() * 0.9;
+            if (i == 0) sc -= 0.3;                      // incumbents tend to stumble in the first one
+            t.debScore[i] = clamp(sc, -2.5, 2.5);
+            t.debatesHeld++;
+            int pct = (int) Math.round(clamp(50 + 9 * t.debScore[i], 20, 80));
+            log(t, new String[]{"First", "Second", "Third"}[i] + " debate: " + (pct >= 50 ? "viewers say you won, " + pct + "-" + (100 - pct) : "viewers give it to " + t.oppLast + ", " + (100 - pct) + "-" + pct) + ".");
+            snd(Sfx.BELL);
+        }
+
+        static void elect32(Game g, Term t) {
+            Random r = g.rng;
+            double inc = projection(t) + r.nextGaussian() * 2.0;
+            t.nat32 = inc;
+            t.m32 = new double[NS];
+            int[] ev = ev2030();
+            t.ev32P = 0; t.ev32O = 0;
+            double vp = 0, vt = 0;
+            for (int s = 0; s < NS; s++) {
+                t.m32[s] = stateMargin(t, s, inc) + r.nextGaussian() * 2.0;
+                if (mine(t, t.m32[s])) t.ev32P += ev[s]; else t.ev32O += ev[s];
+                double sh = 0.5 + (t.party == REP ? -t.m32[s] : t.m32[s]) / 200.0;
+                vp += t.w28[s] * clamp(sh, 0.05, 0.95); vt += t.w28[s];
+            }
+            t.pop32P = vp / Math.max(1, vt) * 100;
+            // Congress
+            double hP = 0.8 * inc + r.nextGaussian() * 2;
+            double hD = t.party == REP ? -hP : hP;
+            t.houseD32 = seatsD(hD, r);
+            t.reelected = t.ev32P >= 270;
+            if (t.ev32P == 269) {                       // a tie: the new House decides, one vote per state delegation
+                t.reelected = t.party == DEM ? t.houseD32 >= 218 : t.party == REP ? t.houseD32 < 218 : false;
+                log(t, "A 269-269 tie. The House decides, and picks " + (t.reelected ? t.presName : t.oppName) + ".");
+            }
+            t.sen32 = new double[NS];
+            Arrays.fill(t.sen32, Double.NaN);
+            int dUp = 0, dWon = 0;
+            for (String tok : CLASS2.split(" ")) {
+                String[] pp = tok.split(":");
+                int s = stateIdx(pp[0]);
+                double h26 = m26(s);
+                boolean dHeld = pp[1].equals("D") || !Double.isNaN(h26) && h26 > 5;      // held before 2026, or a clear 2026 flip
+                if (dHeld) dUp++;
+                double m = lean28(t, s) + natD(t, inc) * 0.9 + (dHeld ? 3 : -3) + r.nextGaussian() * 3.5;
+                t.sen32[s] = m;
+                if (m > 0) dWon++;
+            }
+            t.senateD32 = clampi(t.senateD - dUp + dWon, 0, 100);
+            t.stage = ST_NIGHT;
+            log(t, t.reelected ? "Re-elected: " + t.ev32P + " electoral votes to " + t.ev32O + "." : t.oppName + " wins the presidency, " + t.ev32O + " electoral votes to " + t.ev32P + ".");
+        }
+
+        // ---------------------------------------------------------------- the computer governs (successors, tests)
+        static void aiPriorities(Game g, Term t) {
+            List<Bill> l = new ArrayList<Bill>();
+            for (Bill b : t.bills) if (b.status == 0 || b.status == 2) l.add(b);
+            final Term tt = t;
+            Collections.sort(l, (a, b) -> Double.compare(score(tt, b), score(tt, a)));
+            boolean second = t.q >= 8;
+            for (int i = 0; i < Math.min(3, l.size()); i++) { l.get(i).priority = true; l.get(i).second = second; }
+        }
+
+        static double score(Term t, Bill b) {
+            Pol p = POL[b.id];
+            double best = 0;
+            for (int ap = 0; ap < 4; ap++) if (available(t, p, ap)) best = Math.max(best, whip(t, p, ap, false)[5] * (ap == AP_DEAL ? 0.6 : ap == AP_EXEC ? 0.45 : 1));
+            return best * (p.support - 30) * (b.priority ? 1.4 : 1);
+        }
+
+        static void aiQuarter(Game g, Term t) {
+            if (!t.voted) {
+                Bill pick = null;
+                int bap = 0;
+                double bv = 0;
+                for (Bill b : t.bills) {
+                    if (b.status == 1 || b.status == 3 || b.tries >= 2) continue;
+                    Pol p = POL[b.id];
+                    for (int ap = 0; ap < 4; ap++) {
+                        if (!available(t, p, ap)) continue;
+                        double v = whip(t, p, ap, false)[5] * (ap == AP_DEAL ? 0.6 : ap == AP_EXEC ? 0.45 : 1) * (p.support - 30) * (b.priority ? 1.5 : 1);
+                        if (v > bv) { bv = v; pick = b; bap = ap; }
+                    }
+                }
+                if (pick != null && bv > 4) act(g, t, t.bills.indexOf(pick), bap, t.capital > 1);
+            }
+            t.focus = t.q >= 8 && t.q % 2 == 1 ? 3 : 1;
+            int ev = pickEvent(g, t);
+            if (ev >= 0) applyEvent(g, t, ev, 0);
+            endQuarter(g, t);
+            if (t.stage == ST_MIDTERM) { aiPriorities(g, t); t.stage = ST_DESK; }
+        }
+
+        // ---------------------------------------------------------------- events
+        static final String[] EV_TITLE = {"A hurricane hits the Gulf Coast", "A government shutdown looms", "Crisis in the Taiwan Strait", "A Supreme Court vacancy",
+                "A scandal in your administration", "AI layoffs sweep white-collar jobs", "A mass shooting shocks the country", "A blowout jobs report",
+                "Oil prices spike", "The economy is shrinking", "A court blocks your executive order", "The debt ceiling", "A new virus is spreading", "A surge at the southern border"};
+
+        static boolean divided(Term t) { return ownH(t) < 218 || ownS(t) < 50; }
+
+        static int pickEvent(Game g, Term t) {
+            Random r = g.rng;
+            if (t.q >= 14 || r.nextDouble() > 0.65) return -1;
+            List<Integer> c = new ArrayList<Integer>();
+            for (int e = 0; e < EV_TITLE.length; e++) {
+                boolean once = e == 3 || e == 11 || e == 12;
+                if (once && (t.flags & (1 << e)) != 0) continue;
+                if ((e == 1 || e == 11) && !divided(t)) continue;
+                if (e == 7 && t.gdp < 2.2) continue;
+                if (e == 9 && t.shock == 0) continue;
+                boolean exec = false;
+                for (Bill b : t.bills) if (b.status == 3) exec = true;
+                if (e == 10 && !exec) continue;
+                if ((t.flags & (1 << e)) != 0 && r.nextDouble() < 0.7) continue;
+                c.add(e);
+            }
+            if (c.isEmpty()) return -1;
+            int e = c.get(r.nextInt(c.size()));
+            t.flags |= 1 << e;
+            return e;
+        }
+
+        static String evBody(Term t, int e) {
+            switch (e) {
+                case 0: return "A Category 4 storm has flattened towns from Louisiana to the Florida Panhandle. Governors want federal help, fast.";
+                case 1: return "Congress hasn't passed the spending bills, and the other party wants concessions before it funds the government.";
+                case 2: return "Chinese warships have surrounded Taiwan in what Beijing calls an exercise. Allies are watching what you do.";
+                case 3: return "A justice has announced their retirement. The Senate has " + ownS(t) + " senators from your side.";
+                case 4: return "A cabinet official is accused of steering contracts to a donor's company. The story is leading every newscast.";
+                case 5: return "Three of the biggest employers in the country announce they will replace a fifth of their office staff with AI agents.";
+                case 6: return "Fourteen people are dead after a shooting at a shopping center. The country is looking to you.";
+                case 7: return "The economy added 380,000 jobs last month, the best report in years.";
+                case 8: return "A pipeline attack in the Gulf has pushed oil past $110 a barrel. Gas prices are climbing.";
+                case 9: return "The economy shrank last quarter, and economists say a recession has begun.";
+                case 10: return "A federal judge has blocked one of your executive orders nationwide.";
+                case 11: return "The Treasury will run out of room to borrow within weeks. The other party wants spending cuts in return for raising the limit.";
+                case 12: return "A new respiratory virus is spreading in three cities. Hospitals are filling up.";
+                default: return "Crossings at the southern border have doubled in two months, and border towns are overwhelmed.";
+            }
+        }
+
+        static String[] evOpts(Term t, int e) {
+            switch (e) {
+                case 0: return new String[]{"Surge federal help now", "Let the states lead"};
+                case 1: return new String[]{"Cut a deal", "Hold the line"};
+                case 2: return new String[]{"Send carriers and rally allies", "Quiet diplomacy", "Stay out of it"};
+                case 3: return new String[]{"Nominate a mainstream jurist", "A bold pick for the base"};
+                case 4: return new String[]{"Fire the official today", "Stand by them", "Appoint an independent investigator"};
+                case 5: return new String[]{"Retraining and wage insurance", "Let the market adjust"};
+                case 6: return new String[]{t.list == DEM ? "Push for gun laws now" : "Push school safety and mental health", "Comfort the families and wait"};
+                case 7: return new String[]{"Take a victory lap"};
+                case 8: return new String[]{"Release the strategic reserve", "Ride it out"};
+                case 9: return new String[]{"Ask Congress for a stimulus", "Stay the course"};
+                case 10: return new String[]{"Appeal to the Supreme Court", "Accept the ruling"};
+                case 11: return new String[]{"Negotiate spending cuts", "Refuse to negotiate"};
+                case 12: return new String[]{"Move fast: tests, vaccines, guidance", "Keep things open"};
+                default: return new String[]{"An executive crackdown", "Ask Congress for money and judges"};
+            }
+        }
+
+        static void applyEvent(Game g, Term t, int e, int o) {
+            Random r = g.rng;
+            String s;
+            switch (e) {
+                case 0:
+                    if (o == 0) { boolean bad = r.nextDouble() < 0.2; t.approval += bad ? -1.5 : 1.2; s = bad ? "The federal response to the hurricane is slow and chaotic." : "FEMA's fast response to the hurricane wins praise."; }
+                    else { t.approval -= 1.5; s = "Governors blast the White House for leaving them on their own after the hurricane."; }
+                    break;
+                case 1:
+                    if (o == 0) { t.approval += 0.3; t.enthusiasm -= 0.5; s = "A last-minute deal keeps the government open. Your base grumbles about the concessions."; }
+                    else if (r.nextDouble() < 0.55) { t.approval += 1.5; t.enthusiasm += 0.5; s = "After a week-long shutdown, the other party caves."; }
+                    else { t.approval -= 2.0; s = "A three-week shutdown ends on the other party's terms, and voters blame the White House."; }
+                    break;
+                case 2:
+                    if (o == 0) { if (r.nextDouble() < 0.15) { t.approval -= 2; t.inflation += 0.3; s = "A naval collision near Taiwan rattles markets before both sides pull back."; } else { t.approval += 1.0; t.inflation += 0.2; s = "Beijing backs off after US carriers arrive. The country rallies behind the president."; } }
+                    else if (o == 1) { t.approval += 0.3; s = "Quiet diplomacy calms the Taiwan Strait."; }
+                    else { t.approval -= 1.0; s = "Critics in both parties call the White House weak on China."; }
+                    break;
+                case 3: {
+                    double pc = o == 0 ? (ownS(t) >= 50 ? 0.95 : 0.6) : (ownS(t) >= 50 ? 0.75 : 0.15);
+                    if (r.nextDouble() < pc) { t.approval += 0.3; if (o == 1) t.enthusiasm += 1; s = "The Senate confirms your Supreme Court nominee."; }
+                    else { t.approval -= 1; s = "The Senate rejects your Supreme Court nominee."; }
+                    break;
+                }
+                case 4:
+                    if (o == 0) { t.approval -= 0.3; s = "You fire the official the same day. The story fades."; }
+                    else if (o == 1 && r.nextDouble() < 0.5) { t.approval -= 2.5; s = "New documents surface in the contracts scandal. Your defense of the official looks bad."; }
+                    else if (o == 1) { s = "The contracts story fizzles."; }
+                    else { t.approval -= 0.8; s = "An independent investigator takes over the contracts case."; }
+                    break;
+                case 5:
+                    if (o == 0) { t.unemp -= ownH(t) >= 218 && ownS(t) >= 50 ? 0.2 : 0.1; t.approval += 0.6; s = "A retraining and wage-insurance program for laid-off workers launches."; }
+                    else { t.approval -= 0.8; t.gdp += 0.2; s = "The White House says the AI transition will create more jobs than it destroys. Laid-off workers aren't convinced."; }
+                    break;
+                case 6:
+                    if (o == 0) { t.approval += 0.3; t.enthusiasm += 0.5; s = "You call on Congress to act after the shooting."; }
+                    else { t.approval += 0.1; s = "You visit the families after the shooting."; }
+                    break;
+                case 7: t.approval += 0.8; s = "A blowout jobs report lifts the president's numbers."; break;
+                case 8:
+                    if (o == 0) { t.inflation -= 0.1; t.approval += 0.3; s = "Oil from the strategic reserve takes the edge off gas prices."; }
+                    else { t.inflation += 0.3; t.approval -= 0.5; s = "Gas tops $5 a gallon."; }
+                    break;
+                case 9:
+                    if (o == 0 && (ownH(t) >= 218 && ownS(t) >= 50 || r.nextDouble() < 0.4)) { t.gdp += 1; t.inflation += 0.3; t.shock *= 0.5; t.approval += 0.5; s = "Congress passes a stimulus package."; }
+                    else if (o == 0) { t.approval -= 0.5; s = "Congress refuses the president's stimulus request."; }
+                    else { t.approval -= 1; s = "The White House says the economy will right itself."; }
+                    break;
+                case 10: {
+                    Bill eo = null;
+                    for (Bill b : t.bills) if (b.status == 3) eo = b;
+                    if (eo == null) { s = "The court fight goes nowhere."; break; }
+                    if (o == 0 && r.nextDouble() < 0.5) s = "The Supreme Court lets your order on " + POL[eo.id].name.toLowerCase() + " stand.";
+                    else { eo.status = 4; s = "Courts block your executive order on " + POL[eo.id].name.toLowerCase() + "."; }
+                    break;
+                }
+                case 11:
+                    if (o == 0) { t.approval -= 0.2; t.gdp -= 0.1; t.enthusiasm -= 0.5; s = "A debt-ceiling deal trims spending."; }
+                    else if (r.nextDouble() < 0.6) { t.approval += 1; s = "The other party blinks and raises the debt ceiling."; }
+                    else { t.gdp -= 0.8; t.approval -= 2; s = "Markets plunge as the government nears default before a deal is struck."; }
+                    break;
+                case 12:
+                    if (o == 0) { t.approval += 0.8; t.gdp -= 0.2; s = "A fast federal response contains the new virus."; }
+                    else if (r.nextDouble() < 0.5) { t.approval += 0.3; s = "The virus fizzles out."; }
+                    else { t.approval -= 1.5; t.gdp -= 0.3; s = "The virus spreads to dozens of states."; }
+                    break;
+                default:
+                    if (o == 0) { t.approval += t.list == REP ? 0.8 : 0.4; if (t.list == DEM) t.enthusiasm -= 0.5; s = "New executive limits on asylum claims slow the border surge."; }
+                    else { t.approval += 0.2; s = "You ask Congress for more border agents and immigration judges."; }
+            }
+            log(t, s);
+        }
+
+        static void showEvent(Battleground2028 u, Game g, Term t, int e) {
+            String[] o = evOpts(t, e);
+            Runnable[] a = new Runnable[o.length];
+            for (int i = 0; i < o.length; i++) { final int k = i; a[i] = () -> applyEvent(g, t, e, k); }
+            Modal m = new Modal();
+            m.title = EV_TITLE[e]; m.body = evBody(t, e); m.buttons = o; m.actions = a; m.col = C_AMBER; m.stacked = true;
+            if (u.modal == null) u.modal = m; else u.modalQueue.add(m);
+            snd(Sfx.OPEN);
+        }
+
+        // ---------------------------------------------------------------- entry points
+        static void begin(Battleground2028 u) {
+            Game g = u.game;
+            if (g.term == null) g.term = start(g, g.me());
+            u.go(SC_GOVERN);
+            snd(Sfx.STING);
+        }
+
+        /** After a loss: the winner's first year, then the epilogue. */
+        static void oneYearLater(Battleground2028 u) {
+            Game g = u.game;
+            if (g.term == null) g.term = lossTerm(g);
+            u.go(SC_EPILOGUE);
+        }
+
+        static Term lossTerm(Game g) {
+            {
+                Camp me = g.me();
+                int w = General.winnerParty(g);
+                Camp k = w == DEM ? g.nominee(DEM) : w == REP ? g.nominee(REP) : g.indep();
+                double tot = Math.max(1, g.popD + g.popR + g.popO);
+                double pm = w == DEM ? (g.popD - g.popR) / tot * 100 : w == REP ? (g.popR - g.popD) / tot * 100 : 2;
+                double[] m = new double[NS];
+                for (int s = 0; s < NS; s++) m[s] = Vote.margin(g.result[s]);
+                Term t = successor(g, w, k != null ? k.name() : "The president", k != null ? k.last() : "the president", null, g.houseSeatsD >= 0 ? g.houseSeatsD : (int) Math.round(g.houseD), General.senateSeats(g), g.unemp, g.inflation, g.gdp, pm, 0);
+                Term host = new Term();
+                host.lost2028 = true;
+                host.presName = me != null ? me.name() : "";
+                host.presLast = me != null ? me.last() : "";
+                host.presId = me != null ? me.c.id : null;
+                host.party = me != null ? me.party : DEM;
+                host.pm28 = me != null ? Legacy.myMargin(g, me) : 0;
+                host.next = t;
+                host.stage = ST_DONE;
+                epilogue(g, host);
+                // the night itself
+                boolean watch = g.set.role == ROLE_WATCH;
+                if (watch && !host.epi.isEmpty()) host.epi.remove(0);
+                if (me != null) {
+                    String night;
+                    if (watch) night = (k != null ? k.name() : "The winner") + " won the presidency with " + (w == DEM ? g.evD : w == REP ? g.evR : g.evI) + " electoral votes.";
+                    else if (g.spectator || !me.nominee) night = "You didn't win the nomination; " + (k != null ? k.name() : "the other side") + " won the presidency with " + (w == DEM ? g.evD : w == REP ? g.evR : g.evI) + " electoral votes.";
+                    else {
+                        night = "On Election Night you won " + Legacy.myEv(g, me) + " electoral votes to " + (w == DEM ? g.evD : w == REP ? g.evR : g.evI) + (host.pm28 > 0 ? ", while winning the popular vote by " + fmt1(host.pm28) + " points." : ", and lost the popular vote by " + fmt1(-host.pm28) + " points.");
+                        List<Integer> close = new ArrayList<Integer>();
+                        for (int s = 0; s < NS; s++) if (me.party == DEM ? m[s] < 0 : me.party == REP ? m[s] > 0 : true) close.add(s);
+                        final double[] mm = m;
+                        Collections.sort(close, (a, b) -> Double.compare(Math.abs(mm[a]), Math.abs(mm[b])));
+                        StringBuilder c = new StringBuilder();
+                        for (int i = 0; i < Math.min(3, close.size()); i++) c.append(i > 0 ? ", " : "").append(STATES[close.get(i)].name).append(" (").append(margin(m[close.get(i)])).append(")");
+                        if (me.party <= REP && c.length() > 0) night += " The closest states you lost: " + c + ".";
+                    }
+                    host.epi.add(watch ? 0 : 1, new String[]{"Election Night 2028", night});
+                }
+                // what comes next
+                double mP = 0.5 * (t.approval - 50) - 2.5;
+                int nowP = t.list == DEM ? t.houseD : 435 - t.houseD;
+                int expP = (int) Math.round(t.list == DEM ? 210 + 3.8 * mP : 435 - (210 - 3.8 * mP));
+                String mid = "With President " + t.presLast + " at " + Math.round(t.approval) + "%, forecasters expect " + plural(t.list) + " to " + (expP < nowP ? "lose about " + (nowP - expP) : "gain about " + (expP - nowP)) + " House seats in the 2030 midterms.";
+                List<Cand> field = new ArrayList<Cand>();
+                for (Cand c : ROSTER) if (me != null && c.party == me.party && !c.custom && !c.id.equals(me.c.id)) field.add(c);
+                Collections.sort(field, (a, b) -> Integer.compare(b.a[A_CHA] + b.a[A_DEB] + b.a[A_SPE] + b.a[A_EST], a.a[A_CHA] + a.a[A_DEB] + a.a[A_SPE] + a.a[A_EST]));
+                if (me != null && me.party <= REP && field.size() >= 3)
+                    mid += " The " + PARTY[me.party] + " field for 2032 is already forming: " + field.get(0).name() + ", " + field.get(1).name() + " and " + field.get(2).name() + (host.pm28 > -3 && me.nominee && !watch ? ", and you lead the early polls." : ".");
+                host.epi.add(new String[]{"What comes next", mid});
+                return host;
+            }
+        }
+
+        static void finish(Battleground2028 u, Game g, Term t) {
+            wrapUp(g, t);
+            u.go(SC_EPILOGUE);
+            SaveGame.save(u, SaveGame.AUTO);
+        }
+
+        static void wrapUp(Game g, Term t) {
+            if (t.reelected) {
+                t.next = successor(g, t.party, t.presName, t.presLast, t, t.houseD32, t.senateD32, t.unemp, t.inflation, t.gdp, t.pop32P * 2 - 100, 16);
+                t.next.approval0 = t.approval;
+            } else {
+                t.next = successor(g, t.oppParty, t.oppName, t.oppLast, null, t.houseD32, t.senateD32, t.unemp, t.inflation, t.gdp, 100 - t.pop32P * 2, 16);
+            }
+            t.stage = ST_DONE;
+            epilogue(g, t);
+        }
+
+        // ---------------------------------------------------------------- the epilogue
+        static int score(Term t) {
+            int s = 600;
+            for (Bill b : t.bills) if (b.status == 1 || b.status == 3) s += b.priority ? 140 : 60;
+            if (t.reelected) s += 600 + 2 * Math.max(0, t.ev32P - 270);
+            s += (int) Math.round(10 * (t.approval - 45));
+            if (t.houseD30 >= 0 && (t.list == DEM ? t.houseD30 >= 218 : 435 - t.houseD30 >= 218)) s += 150;
+            return Math.max(100, s);
+        }
+
+        static int rank(Term t) { return clampi(46 - (score(t) - 400) / 55, 3, 45); }
+
+        static String ordinal(int n) { int m = n % 100; return n + (m >= 11 && m <= 13 ? "th" : n % 10 == 1 ? "st" : n % 10 == 2 ? "nd" : n % 10 == 3 ? "rd" : "th"); }
+
+        static String lawList(Term t) {
+            StringBuilder b = new StringBuilder();
+            for (Bill x : t.bills) if (x.status == 1 || x.status == 3) {
+                Pol p = POL[x.id];
+                b.append(p.name).append(x.status == 3 ? " (executive order)" : x.strength < 1 ? " (compromise)" : "").append(": ").append(impact(p, x.strength)).append("\n");
+            }
+            for (Bill x : t.bills) if (x.status == 4) b.append(POL[x.id].name).append(": blocked by the courts.\n");
+            return b.length() == 0 ? "No major laws.\n" : b.toString();
+        }
+
+        static String fate(Cand c, double pm, Random r) {
+            String role = c != null && c.role != null ? c.role.toLowerCase() : "";
+            String base = role.contains("vice president") ? "is back in private life after four years as vice president" : role.contains("governor") && !role.contains("former") ? "is back at work in the governor's office"
+                    : role.contains("senator") && !role.contains("former") ? "is back in the Senate" : role.contains("representative") || role.contains("congress") ? "is back in the House" : "is writing a memoir about the campaign";
+            return base + (pm > -3 ? ", and pundits already talk about a comeback." : ".");
+        }
+
+        static void epilogue(Game g, Term t) {
+            t.epi.clear();
+            Term n = t.next;
+            Random r = g.rng;
+            if (t.lost2028) {
+                t.epi.add(new String[]{"You", t.presName + " " + fate(candById(t.presId), t.pm28, r)});
+                if (n != null) {
+                    t.epi.add(new String[]{"President " + n.presLast + "'s first year", n.presName + " took office on January 20, 2029, with " + Math.round(n.approval0) + "% approval. A year later it is " + Math.round(n.approval) + "%. "
+                            + (n.filibusterGone ? "The Senate has ended the filibuster. " : "") + "Laws passed:"});
+                    t.epi.add(new String[]{"", lawList(n)});
+                    t.epi.add(new String[]{"The country", "Unemployment " + fmt1(n.unemp0) + "% to " + fmt1(n.unemp) + "%. Inflation " + fmt1(n.inflation0) + "% to " + fmt1(n.inflation) + "%. Growth " + fmt1(n.gdp) + "%."});
+                }
+                return;
+            }
+            String head;
+            if (t.reelected) head = "President " + t.presLast + " is ten months into a second term" + (n != null ? ", with approval at " + Math.round(n.approval) + "%." : ".")
+                    + " Re-elected with " + t.ev32P + " electoral votes" + (t.pop32P >= 50 ? " and " + fmt1(t.pop32P) + "% of the vote." : ".");
+            else head = t.presName + " left the White House on January 20, 2033, after losing to " + t.oppName + ", " + t.ev32O + " electoral votes to " + t.ev32P + ". "
+                    + t.presLast + " is writing a memoir and raising money for a presidential library.";
+            t.epi.add(new String[]{"Where you are now", head});
+            t.epi.add(new String[]{"Your record", lawList(t)});
+            String ec = "Unemployment went from " + fmt1(t.unemp0) + "% to " + fmt1(t.unemp) + "%, inflation from " + fmt1(t.inflation0) + "% to " + fmt1(t.inflation) + "%, and growth ended at " + fmt1(t.gdp) + "%.";
+            t.epi.add(new String[]{"The economy", ec});
+            String cong = "Democrats held " + t.houseD0 + " House seats after 2028, " + t.houseD30 + " after 2030 and " + t.houseD32 + " after 2032; " + t.senateD0 + ", " + t.senateD30 + " and " + t.senateD32 + " senators.";
+            t.epi.add(new String[]{"Congress", cong + (t.filibusterGone ? " The filibuster is gone." : "")});
+            if (n != null && !t.reelected) {
+                t.epi.add(new String[]{"President " + n.presLast + "'s first year", "Approval " + Math.round(n.approval) + "%. " + (lawsSince(n, 16) == 0 ? "No major laws yet." : "New laws: " + names(n, 16) + ".")});
+            } else if (n != null && lawsSince(n, 16) > 0) {
+                t.epi.add(new String[]{"The second term so far", "New laws: " + names(n, 16) + "."});
+            }
+            t.epi.add(new String[]{"History's first draft", "Historians' early verdict ranks the " + t.presLast + " presidency " + ordinal(rank(t)) + " of 47."});
+        }
+
+        static int lawsSince(Term t, int q) { int n = 0; for (Bill b : t.bills) if ((b.status == 1 || b.status == 3) && b.quarter >= q) n++; return n; }
+
+        static String names(Term t) { return names(t, -1); }
+
+        static String names(Term t, int since) {
+            StringBuilder b = new StringBuilder();
+            for (Bill x : t.bills) if ((x.status == 1 || x.status == 3) && x.quarter >= since) b.append(b.length() > 0 ? ", " : "").append(POL[x.id].name);
+            return b.toString();
+        }
+
+        static void earned(Game g, List<String> l) {
+            Term t = g.term;
+            if (t == null || t.lost2028) return;
+            if (t.reelected) l.add("reelected");
+            int pp = 0;
+            for (Bill b : t.bills) if (b.priority && !b.second && (b.status == 1 || b.status == 3)) pp++;
+            if (pp >= 3) l.add("lawmaker");
+            if (t.houseD30 >= 0 && t.party == t.list && (t.list == DEM ? t.houseD30 : 435 - t.houseD30) >= 218 && (t.list == DEM ? t.houseD0 : 435 - t.houseD0) >= 218) l.add("midterm");
+            if (t.stage == ST_DONE && t.approval >= 55) l.add("beloved");
+        }
+
+        static void record(Game g, Term t) {
+            if (t.recorded || t.lost2028) return;
+            t.recorded = true;
+            List<String> a = Legacy.earned(g);
+            StringBuilder ids = new StringBuilder();
+            for (String x : a) ids.append(ids.length() > 0 ? "," : "").append(x);
+            String line = "Nov 2, 2032|" + t.presName.replace("|", "/") + "|" + PARTY[t.party].replace("|", "/") + "|" + SCEN_NAME[g.set.scenario] + "|"
+                    + new String[]{"Normal", "Easy", "Normal", "Hard"}[g.set.difficulty + 1] + "|" + (t.reelected ? "Two-term president" : "One-term president") + "|" + (Legacy.score(g) + score(t)) + "|" + t.ev32P + "|" + ids;
+            Legacy.writeAll(Legacy.readAll() + line + "\n");
+        }
+
+        // ---------------------------------------------------------------- drawing
+        static void draw(Battleground2028 u, Graphics2D g) {
+            Game game = u.game;
+            Term t = game.term;
+            if (t == null) { u.go(SC_HOME); return; }
+            if (t.stage == ST_AGENDA || t.stage == ST_AGENDA2) { agenda(u, g, game, t); return; }
+            if (t.stage == ST_MIDTERM) { midtermScreen(u, g, game, t); return; }
+            if (t.stage == ST_CAMP1 || t.stage == ST_CAMP2) { campaign(u, g, game, t); return; }
+            if (t.stage == ST_NIGHT) { night(u, g, game, t); return; }
+            if (t.stage == ST_DONE) { u.go(SC_EPILOGUE); return; }
+            desk(u, g, game, t);
+        }
+
+        static void stat(Graphics2D g, double x, double y, double w, String lab, String val, String sub, Color c) {
+            g.setColor(new Color(255, 255, 255, 10));
+            g.fill(new RoundRectangle2D.Double(x, y, w, 70, 10, 10));
+            label(g, lab, x + 12, y + 18, C_DIM);
+            text(g, val, x + 12, y + 48, F_H2, c);
+            if (sub != null) textR(g, sub, x + w - 10, y + 48, F_XS, C_DIM);
+        }
+
+        static String seats(int d, int total) { return d + " D - " + (total - d) + " R"; }
+
+        static void statsRow(Graphics2D g, Term t, double y) {
+            double w = (DW - 96 - 7 * 10) / 8.0, x = 48;
+            stat(g, x, y, w, "Approval", Math.round(t.approval) + "%", t.nHist > 1 ? (t.approval >= t.appHist[Math.max(0, t.nHist - 2)] ? "up" : "down") : null, t.approval >= 50 ? C_GOOD : t.approval >= 43 ? Color.white : C_BAD); x += w + 10;
+            stat(g, x, y, w, "Right track", Math.round(Custom.rightTrack(t.approval, t.unemp, t.inflation, t.gdp)) + "%", null, Color.white); x += w + 10;
+            stat(g, x, y, w, "Unemployment", fmt1(t.unemp) + "%", null, t.unemp <= 4.5 ? C_GOOD : t.unemp >= 6 ? C_BAD : Color.white); x += w + 10;
+            stat(g, x, y, w, "Inflation", fmt1(t.inflation) + "%", null, t.inflation <= 2.8 ? C_GOOD : t.inflation >= 4 ? C_BAD : Color.white); x += w + 10;
+            stat(g, x, y, w, "Growth", fmt1(t.gdp) + "%", null, t.gdp >= 2 ? C_GOOD : t.gdp < 0 ? C_BAD : Color.white); x += w + 10;
+            stat(g, x, y, w, "House", seats(t.houseD, 435), null, t.houseD >= 218 ? C_DEM_L : C_REP_L); x += w + 10;
+            stat(g, x, y, w, "Senate", seats(t.senateD, 100), t.filibusterGone ? "no filibuster" : null, t.senateD >= 51 ? C_DEM_L : t.senateD == 50 ? Color.white : C_REP_L); x += w + 10;
+            stat(g, x, y, w, "Political capital", t.capital + " of 3", null, C_GOLD);
+        }
+
+        static void chart(Graphics2D g, double x, double y, double w, double h, double[] v, int n, double lo, double hi, Color c) { chart(g, x, y, w, h, v, n, lo, hi, c, 16); }
+
+        static void chart(Graphics2D g, double x, double y, double w, double h, double[] v, int n, double lo, double hi, Color c, int span) {
+            g.setColor(new Color(255, 255, 255, 18));
+            for (int k = 0; k <= 4; k++) { double yy = y + h * k / 4.0; g.draw(new Line2D.Double(x, yy, x + w, yy)); textR(g, String.valueOf((int) Math.round(hi - (hi - lo) * k / 4.0)), x - 6, yy + 4, F_T, C_DIM); }
+            g.setColor(new Color(255, 255, 255, 60));
+            double y50 = y + h * (hi - 50) / (hi - lo);
+            g.draw(new Line2D.Double(x, y50, x + w, y50));
+            if (n < 2) return;
+            g.setColor(c);
+            g.setStroke(new BasicStroke(2.5f));
+            for (int i = 1; i < n; i++) {
+                double x0 = x + w * (i - 1) / (double) span, x1 = x + w * i / (double) span;
+                double y0 = y + h * (hi - clamp(v[i - 1], lo, hi)) / (hi - lo), y1 = y + h * (hi - clamp(v[i], lo, hi)) / (hi - lo);
+                g.draw(new Line2D.Double(x0, y0, x1, y1));
+            }
+            g.setStroke(new BasicStroke(1f));
+        }
+
+        static void agenda(Battleground2028 u, Graphics2D g, Game game, Term t) {
+            boolean second = t.stage == ST_AGENDA2;
+            Screens.header(u, g, second ? "New Priorities for 2031-32" : "Inauguration Day",
+                    second ? "After the midterms. Choose up to three priorities for the second half of your term." : "January 20, 2029. " + t.presName + " takes the oath. Choose up to three priorities for your first two years.");
+            int n = priorities(t, second);
+            for (int i = 0; i < t.bills.size(); i++) {
+                Bill b = t.bills.get(i);
+                Pol p = POL[b.id];
+                double x = 48 + (i % 2) * 508, y = 124 + (i / 2) * 98, w = 500, h = 90;
+                boolean done = b.status == 1 || b.status == 3;
+                boolean sel = b.priority && b.second == second;
+                final Bill bb = b;
+                u.card(g, x, y, w, h, sel, done ? null : () -> {
+                    if (bb.priority && bb.second == second) bb.priority = false;
+                    else if (priorities(t, second) < 3) { if (bb.priority && !second) return; bb.priority = true; bb.second = second; }
+                }, done ? "Already law." : sel ? "A priority. Click to drop it." : "Make this a priority.");
+                text(g, p.name, x + 16, y + 26, F_BB, done ? C_DIM : sel ? C_GOLD : Color.white);
+                textR(g, done ? (b.status == 3 ? "Executive order" : "Law") : "Support " + Math.round(p.support) + "%", x + w - 14, y + 26, F_XSB, done ? C_GOOD : p.support >= 55 ? C_GOOD : p.support < 48 ? C_BAD : C_TEXT);
+                wrap(g, p.desc, x + 16, y + 46, w - 32, F_XS, C_TEXT);
+                String vehicle = p.recon ? "Can pass by reconciliation (a simple majority)" : t.filibusterGone ? "Needs a simple majority" : "Needs 60 votes in the Senate";
+                text(g, vehicle + (p.exec ? "  |  Executive action possible" : ""), x + 16, y + 80, F_T, C_DIM);
+            }
+            double px = 1072, pw = DW - 48 - px;
+            u.panel(g, px, 124, pw, 690, "Congress");
+            text(g, "House", px + 20, 172, F_H3, C_TEXT);
+            textR(g, seats(t.houseD, 435), px + pw - 20, 172, F_BB, t.houseD >= 218 ? C_DEM_L : C_REP_L);
+            text(g, "Senate", px + 20, 204, F_H3, C_TEXT);
+            textR(g, seats(t.senateD, 100), px + pw - 20, 204, F_BB, t.senateD >= 51 ? C_DEM_L : t.senateD == 50 ? Color.white : C_REP_L);
+            boolean h = ownH(t) >= 218, s = ownS(t) >= 50;
+            String ctl = t.party != t.list ? "No party of your own in Congress: every bill needs a coalition." : h && s ? "Your party controls both chambers: a trifecta." : h ? "Your party has the House; the other party runs the Senate." : s ? "Your party has the Senate; the other party runs the House." : "The other party controls both chambers.";
+            double y = 236 + wrap(g, ctl, px + 20, 236, pw - 40, F_S, Color.white);
+            y += 12 + wrap(g, (t.filibusterGone ? "The filibuster is gone: bills need a simple majority." : "Most bills need 60 votes to beat a filibuster. Budget bills can go through reconciliation with a simple majority, once a year.")
+                    + " Bipartisan deals win votes from the other side but water bills down. Some things can be done by executive order, though the courts may block them.", px + 20, y + 12, pw - 40, F_XS, C_DIM);
+            label(g, "Your priorities (" + n + " of 3)", px + 20, y + 40, C_GOLD);
+            y += 60;
+            for (Bill b : t.bills) if (b.priority && b.second == second) { text(g, POL[b.id].name, px + 20, y, F_S, Color.white); y += 22; }
+            if (second) {
+                label(g, "Already law", px + 20, y + 16, C_DIM);
+                y += 36;
+                for (Bill b : t.bills) if (b.status == 1 || b.status == 3) { text(g, POL[b.id].name, px + 20, y, F_XS, C_TEXT); y += 18; }
+            }
+            u.button(g, DW - 48 - 300, 832, 300, 44, second ? "Back to work" : "Take the oath", B_GOLD, () -> { t.stage = ST_DESK; snd(Sfx.CHIME); },
+                    "Priorities get your full attention: passing them matters most to your score and your legacy.");
+            u.button(g, 48, 832, 220, 44, "Main menu", B_GHOST, () -> { SaveGame.save(u, SaveGame.AUTO); u.go(SC_HOME); });
+        }
+
+        static void desk(Battleground2028 u, Graphics2D g, Game game, Term t) {
+            int toMid = 7 - t.q;
+            String sub = when(t.q) + "  |  " + (toMid > 0 ? "Midterms in " + (toMid + 1) + " quarters" : toMid == 0 ? "The midterms are this fall" : t.q < 12 ? "Re-election in " + (15 - t.q) + " quarters" : "An election year");
+            Screens.header(u, g, "The " + t.presLast + " White House", sub);
+            statsRow(g, t, 118);
+            // the agenda
+            u.panel(g, 48, 202, 500, 612, "Your agenda");
+            double y = 236;
+            for (int i = 0; i < t.bills.size(); i++) {
+                Bill b = t.bills.get(i);
+                Pol p = POL[b.id];
+                final int k = i;
+                boolean done = b.status == 1 || b.status == 3;
+                u.card(g, 60, y, 476, 34, t.pick == i, done || t.voted ? null : () -> { t.pick = k; if (!available(t, p, t.approach)) t.approach = AP_LINE; }, p.desc);
+                if (b.priority) { g.setColor(C_GOLD); g.fill(new Ellipse2D.Double(70, y + 13, 8, 8)); }
+                text(g, p.name, 86, y + 22, F_S, done ? C_DIM : Color.white);
+                String st = b.status == 1 ? (b.strength < 1 ? "Law (deal)" : "Law") : b.status == 2 ? "Failed" : b.status == 3 ? "Executive order" : b.status == 4 ? "Blocked" : "";
+                textR(g, st, 524, y + 22, F_XSB, b.status == 1 || b.status == 3 ? C_GOOD : b.status == 2 || b.status == 4 ? C_BAD : C_DIM);
+                y += 38;
+            }
+            if (!t.filibusterGone && ownS(t) >= 50 && t.party == t.list) {
+                u.card(g, 60, y, 476, 34, t.pick == PICK_FILIBUSTER, t.voted ? null : () -> t.pick = PICK_FILIBUSTER, "Change the Senate's rules so bills need only a majority. Needs 50 of your own senators.");
+                text(g, "Rules: end the filibuster", 86, y + 22, F_S, C_AMBER);
+            }
+            // this quarter's fight
+            double mx = 564, mw = 500;
+            u.panel(g, mx, 202, mw, 612, "This quarter's fight");
+            if (t.voted) {
+                wrap(g, "You've had this quarter's fight in Congress. " + (t.log.isEmpty() ? "" : t.log.get(t.log.size() - 1)), mx + 20, 250, mw - 40, F_S, C_TEXT);
+            } else if (t.pick == PICK_FILIBUSTER) {
+                text(g, "End the filibuster", mx + 20, 256, F_H3, Color.white);
+                wrap(g, "A simple-majority rules change. Some of your own senators may balk, and voters who like checks and balances won't love it. Your base will.", mx + 20, 282, mw - 40, F_XS, C_TEXT);
+                text(g, "Chance of success: " + Math.round(100 * filibusterOdds(t)) + "%", mx + 20, 350, F_BB, C_GOLD);
+                u.button(g, mx + 20, 380, mw - 40, 40, "Call the vote", B_PRIMARY, () -> { act(game, t, PICK_FILIBUSTER, 0, false); voteResult(u, t); });
+            } else if (t.pick < 0) {
+                wrap(g, "Pick a bill from your agenda. You get one big fight in Congress each quarter. Priorities are marked with a gold dot.", mx + 20, 250, mw - 40, F_S, C_TEXT);
+            } else {
+                Bill b = t.bills.get(t.pick);
+                Pol p = POL[b.id];
+                text(g, p.name, mx + 20, 256, F_H3, Color.white);
+                double yy = 266 + wrap(g, p.desc, mx + 20, 276, mw - 40, F_XS, C_TEXT);
+                text(g, "Public support " + Math.round(p.support) + "%", mx + 20, yy + 26, F_XSB, p.support >= 55 ? C_GOOD : p.support < 48 ? C_BAD : C_TEXT);
+                label(g, "How you push it", mx + 20, yy + 56, C_DIM);
+                u.segmented(g, mx + 20, yy + 64, mw - 40, 32, APPROACH, t.approach, i -> t.approach = i, new String[]{"Your party's bill, all of it. Needs 60 senators unless the filibuster is gone.",
+                        "Water it down for votes from the other side: about 60% of the effect.", p.recon ? (reconOk(t, p) ? "A budget bill with a simple majority in the Senate. Once a year." : "You've used this year's reconciliation bill.") : "Not a budget bill: it can't go through reconciliation.",
+                        p.exec ? "No vote needed, but weaker, and the courts may block it." : "This needs Congress: there's no executive-order version."});
+                boolean ok = available(t, p, t.approach);
+                yy += 112;
+                if (!ok) { wrap(g, t.approach == AP_RECON ? (p.recon ? "You've used this year's reconciliation bill." : "This isn't a budget bill, so it can't go through reconciliation.") : "There is no executive-order version of this.", mx + 20, yy, mw - 40, F_S, C_BAD); }
+                else if (t.approach == AP_EXEC) { wrap(g, "Sign it as an executive order. About 45% of the effect, and the courts may block it.", mx + 20, yy, mw - 40, F_S, C_TEXT); }
+                else {
+                    u.toggle(g, mx + 20, yy - 14, t.goPublic, () -> { if (t.capital > 0 || t.goPublic) t.goPublic = !t.goPublic; }, "Rallies, interviews and calls to wavering members. Costs 1 political capital.");
+                    text(g, "Go to the country (1 capital)", mx + 66, yy + 2, F_S, t.goPublic ? Color.white : C_DIM);
+                    double[] w = whip(t, p, t.approach, t.goPublic && t.capital > 0);
+                    yy += 34;
+                    text(g, "House", mx + 20, yy + 12, F_XSB, C_TEXT);
+                    bar(g, mx + 90, yy + 2, mw - 190, 12, w[0] / 435, C_ACCENT);
+                    g.setColor(Color.white); g.fill(new Rectangle2D.Double(mx + 90 + (mw - 190) * 218 / 435.0, yy - 2, 2, 20));
+                    textR(g, Math.round(w[0]) + " of 218", mx + mw - 20, yy + 12, F_XS, C_TEXT);
+                    yy += 30;
+                    text(g, "Senate", mx + 20, yy + 12, F_XSB, C_TEXT);
+                    bar(g, mx + 90, yy + 2, mw - 190, 12, w[2] / 100, C_ACCENT);
+                    g.setColor(Color.white); g.fill(new Rectangle2D.Double(mx + 90 + (mw - 190) * w[4] / 100.0, yy - 2, 2, 20));
+                    textR(g, Math.round(w[2]) + " of " + (int) w[4], mx + mw - 20, yy + 12, F_XS, C_TEXT);
+                    yy += 34;
+                    text(g, w[6] > 0 ? (w[6] == 1 ? "The Speaker won't bring it to the floor." : "The majority leader won't bring it up.") : "Chance of passing: " + Math.round(100 * w[5]) + "%", mx + 20, yy + 10, F_BB, w[5] >= 0.6 ? C_GOOD : w[5] >= 0.3 ? C_GOLD : C_BAD);
+                }
+                u.button(g, mx + 20, 616, mw - 40, 40, t.approach == AP_EXEC ? "Sign the executive order" : "Bring it to a vote", ok ? B_PRIMARY : B_OFF, ok ? () -> { act(game, t, t.pick, t.approach, t.goPublic); voteResult(u, t); } : null);
+            }
+            label(g, "How you spend your time", mx + 20, 690, C_DIM);
+            u.segmented(g, mx + 20, 700, mw - 40, 32, FOCUS, t.focus, i -> t.focus = i, new String[]{"Jobs, prices and growth: helps most when the economy is hurting.", "Rallies and town halls: a little approval every quarter.",
+                    "Summits and diplomacy: steadier in a crisis.", "Raise money and recruit candidates for the midterms" + (t.q >= 8 ? " and build your re-election war chest." : ".")});
+            String[] fd = {"Jobs, prices and growth.", "Rallies and town halls around the country.", "Summits and diplomacy.", t.q >= 8 ? "Fundraising for your party and your re-election." : "Fundraising and recruiting for the midterms."};
+            text(g, fd[t.focus], mx + 20, 756, F_XS, C_TEXT);
+            // approval and news
+            double rx = 1080, rw = DW - 48 - rx;
+            u.panel(g, rx, 202, rw, 612, "Approval");
+            chart(g, rx + 46, 240, rw - 66, 150, t.appHist, t.nHist, 30, 70, C_GOLD);
+            label(g, "News", rx + 20, 428, C_DIM);
+            double ny = 448;
+            for (int i = t.log.size() - 1; i >= 0 && ny < 790; i--) ny += 6 + wrap(g, t.log.get(i), rx + 20, ny, rw - 40, F_XS, i == t.log.size() - 1 ? Color.white : C_DIM);
+            u.button(g, 48, 832, 220, 44, "Main menu", B_GHOST, () -> { SaveGame.save(u, SaveGame.AUTO); u.go(SC_HOME); });
+            u.button(g, DW - 48 - 300, 832, 300, 44, t.q == 7 ? "On to the midterms" : t.q == 13 ? "On to the campaign" : "End the quarter", B_GOLD, () -> nextQuarter(u, game, t));
+        }
+
+        static void voteResult(Battleground2028 u, Term t) {
+            u.toast(t.log.get(t.log.size() - 1), C_GOLD);
+            t.pick = -1;
+        }
+
+        static void nextQuarter(Battleground2028 u, Game game, Term t) {
+            endQuarter(game, t);
+            if (t.stage == ST_DESK) { int e = pickEvent(game, t); if (e >= 0) showEvent(u, game, t, e); }
+            if (t.stage == ST_MIDTERM) snd(Sfx.BELL); else snd(Sfx.CHIME, 0.4, 1);
+            SaveGame.save(u, SaveGame.AUTO);
+        }
+
+        static void senateMap(Battleground2028 u, Graphics2D g, Game game, double[] m, double x, double y, double w, double h) {
+            double[] f = USMap.fit(x, y, w, h);
+            for (int s = 0; s < NS; s++) USMap.cur[s] = m == null || Double.isNaN(m[s]) ? new Color(0x1c, 0x25, 0x3a) : marginColor(m[s], 1);
+            Night.fitDraw(u, g, f);
+        }
+
+        static void midtermScreen(Battleground2028 u, Graphics2D g, Game game, Term t) {
+            Screens.header(u, g, "The 2030 Midterms", "November 5, 2030. " + (t.party == t.list ? (t.midMargin >= 0 ? "Your party wins the national House vote by " : "Your party loses the national House vote by ") + fmt1(Math.abs(t.midMargin)) + " points." : "The verdict on the parties."));
+            u.panel(g, 48, 124, 520, 690, "Results");
+            int hB = t.houseD0, sB = t.senateD0;
+            text(g, "House", 68, 180, F_H3, C_TEXT);
+            text(g, seats(t.houseD30, 435), 68, 220, F_H2, t.houseD30 >= 218 ? C_DEM_L : C_REP_L);
+            text(g, "Democrats " + (t.houseD30 - hB >= 0 ? "+" : "") + (t.houseD30 - hB), 68, 246, F_XS, C_DIM);
+            text(g, "Senate", 300, 180, F_H3, C_TEXT);
+            text(g, seats(t.senateD30, 100), 300, 220, F_H2, t.senateD30 >= 51 ? C_DEM_L : t.senateD30 == 50 ? Color.white : C_REP_L);
+            text(g, "Democrats " + (t.senateD30 - sB >= 0 ? "+" : "") + (t.senateD30 - sB), 300, 246, F_XS, C_DIM);
+            boolean h = ownH(t) >= 218, s = ownS(t) >= 50;
+            String what = t.party != t.list ? "You still have no party in Congress. Every bill needs a coalition." : h && s ? "You keep both chambers. The second half of your term can be as ambitious as the first."
+                    : !h && !s ? "Your party has lost both chambers. Your bills will need the other side's votes, or executive action." : !h ? "You've lost the House. Bills now need the other party's votes there." : "You've lost the Senate. Your nominees and bills need the other party.";
+            double yy = 290 + wrap(g, what, 68, 290, 480, F_S, Color.white);
+            label(g, "Senate seats that changed hands", 68, yy + 30, C_GOLD);
+            yy += 52;
+            for (String tok : CLASS1.split(" ")) {
+                String[] p = tok.split(":");
+                int st = stateIdx(p[0]);
+                boolean dHeld = p[1].equals("D"), dWon = t.sen30[st] > 0;
+                if (dHeld != dWon) { text(g, STATES[st].name + ": " + (dWon ? "Democratic gain" : "Republican gain") + " (" + margin(t.sen30[st]) + ")", 68, yy, F_XS, dWon ? C_DEM_L : C_REP_L); yy += 20; }
+            }
+            double px = 584, pw = DW - 48 - px;
+            u.panel(g, px, 124, pw, 690, "The Senate races");
+            senateMap(u, g, game, t.sen30, px + 10, 170, pw - 20, 600);
+            u.button(g, DW - 48 - 340, 832, 340, 44, "Set your priorities for 2031-32", B_GOLD, () -> {
+                for (Bill b : t.bills) if (b.status == 2) b.tries = 0;
+                t.stage = ST_AGENDA2;
+            });
+        }
+
+        static void campaign(Battleground2028 u, Graphics2D g, Game game, Term t) {
+            boolean fall = t.stage == ST_CAMP2;
+            Cand o = opp(t);
+            Screens.header(u, g, fall ? "The Fall Campaign" : "The 2032 Campaign", fall ? "September 2032. Three debates, then your closing argument." : "Summer 2032. " + t.oppName + " is the " + PARTY[t.oppParty] + " nominee. Set the shape of your campaign.");
+            // the challenger
+            u.panel(g, 48, 124, 400, 690, "The challenger");
+            if (o != null) {
+                Portrait.draw(g, o, 68, 160, 150, 180, u.tsec, 0, false, true);
+                text(g, o.name(), 236, 190, F_H3, Color.white);
+                wrap(g, o.role != null ? o.role : "", 236, 212, 196, F_XS, C_DIM);
+                int[] ks = {A_CHA, A_DEB, A_SPE, A_EST};
+                String[] kn = {"Charisma", "Debating", "Speeches", "Establishment"};
+                for (int i = 0; i < 4; i++) {
+                    text(g, kn[i], 68, 380 + i * 30, F_XS, C_TEXT);
+                    bar(g, 190, 371 + i * 30, 180, 10, o.a[ks[i]] / 100.0, partyColor(t.oppParty));
+                    textR(g, String.valueOf(o.a[ks[i]]), 428, 380 + i * 30, F_XSB, Color.white);
+                }
+            }
+            label(g, "Your record", 68, 520, C_GOLD);
+            String[][] rows = {{"Approval", Math.round(t.approval) + "%"}, {"Laws passed", String.valueOf(laws(t))}, {"Unemployment", fmt1(t.unemp) + "%"}, {"Inflation", fmt1(t.inflation) + "%"}, {"War chest", Math.round(Math.min(4, t.warChest) * 25) + "% of a full one"}};
+            for (int i = 0; i < rows.length; i++) { text(g, rows[i][0], 68, 548 + i * 26, F_S, C_TEXT); textR(g, rows[i][1], 428, 548 + i * 26, F_BB, Color.white); }
+            if (t.challenger != null) wrap(g, "Primary challenge from " + t.challenger + ": some of your party is still sore.", 68, 690, 360, F_XS, C_AMBER);
+            // choices
+            double mx = 464, mw = 600;
+            u.panel(g, mx, 124, mw, 690, fall ? "The debates" : "Your campaign");
+            if (!fall) {
+                label(g, "Your message", mx + 20, 166, C_DIM);
+                u.segmented(g, mx + 20, 176, mw - 40, 32, THEME, t.theme, i -> t.theme = i, new String[]{"Four years of results: works when voters like the results.", "Make it about the other side's plans.", "A fresh agenda: helps when the first term is a hard sell."});
+                String[] td = {"Run on your record: it plays well if approval is near 50%, badly if it's low.", "Make the race a choice, not a referendum: a steady gain whatever your numbers.", "A new agenda for the next four years: the best bet when your approval is weak."};
+                wrap(g, td[t.theme], mx + 20, 230, mw - 40, F_XS, C_TEXT);
+                label(g, "Where the money goes", mx + 20, 280, C_DIM);
+                u.segmented(g, mx + 20, 290, mw - 40, 32, BUDGET, t.budget, i -> t.budget = i, new String[]{"TV everywhere: national reach.", "Organizers and doors: strongest in the states you target.", "A bit of everything.", "Online ads and creators: reach, especially among the young."});
+                label(g, "Battleground focus: pick three", mx + 20, 356, C_DIM);
+                List<Integer> bgs = battlegrounds(t);
+                int nf = 0;
+                for (int s = 0; s < NS; s++) if (t.focusSt[s]) nf++;
+                double pm = projection(t) + t.pollErr;
+                for (int i = 0; i < bgs.size(); i++) {
+                    int s = bgs.get(i);
+                    double rx = mx + 20 + (i % 2) * 284, ry = 370 + (i / 2) * 34;
+                    final int ss = s;
+                    final int nff = nf;
+                    u.toggle(g, rx, ry, t.focusSt[s], () -> { if (t.focusSt[ss]) t.focusSt[ss] = false; else if (nff < 3) t.focusSt[ss] = true; }, "Extra visits, offices and ads in " + STATES[s].name + ".");
+                    text(g, STATES[s].name, rx + 46, ry + 16, F_S, t.focusSt[s] ? Color.white : C_DIM);
+                    double m = stateMargin(t, s, pm);
+                    textR(g, (mine(t, m) ? "You +" : t.oppLast + " +") + fmt1(Math.abs(m)), rx + 270, ry + 16, F_XSB, mine(t, m) ? C_GOOD : C_BAD);
+                }
+                u.button(g, DW - 48 - 300, 832, 300, 44, "On to the fall", B_GOLD, () -> { t.stage = ST_CAMP2; t.warChest = Math.min(4, t.warChest); snd(Sfx.CHIME); });
+            } else {
+                String[] dn = {"First debate", "Second debate", "Third debate"};
+                for (int i = 0; i < 3; i++) {
+                    double y = 170 + i * 150;
+                    final int k = i;
+                    text(g, dn[i], mx + 20, y, F_H3, Color.white);
+                    if (i < t.debatesHeld) {
+                        int pct = (int) Math.round(clamp(50 + 9 * t.debScore[i], 20, 80));
+                        text(g, "You went with: " + DEBATE[t.debate[i]], mx + 20, y + 28, F_XS, C_DIM);
+                        text(g, pct >= 50 ? "Viewers say you won, " + pct + "-" + (100 - pct) + "." : "Viewers give it to " + t.oppLast + ", " + (100 - pct) + "-" + pct + ".", mx + 20, y + 56, F_BB, pct >= 50 ? C_GOOD : C_BAD);
+                    } else if (i == t.debatesHeld) {
+                        u.segmented(g, mx + 20, y + 14, mw - 40, 32, DEBATE, t.debate[i], v -> t.debate[k] = v, new String[]{"Point to what you've done.", "Go after the challenger's agenda.", "Look ahead to a second term.", "A risky line that could go viral, for better or worse."});
+                        u.button(g, mx + 20, y + 60, 240, 36, "Hold the debate", B_PRIMARY, () -> holdDebate(game, t, k));
+                    } else text(g, "Later in the fall.", mx + 20, y + 28, F_XS, C_DIM);
+                }
+                label(g, "Your closing argument", mx + 20, 640, C_DIM);
+                u.segmented(g, mx + 20, 650, mw - 40, 32, CLOSING, t.closing, i -> t.closing = i, new String[]{"Strong when the economy is growing.", "Experience and calm: a safe, modest gain.", "Fire up your base: stronger when they're energized."});
+                boolean ready = t.debatesHeld >= 3;
+                u.button(g, DW - 48 - 300, 832, 300, 44, "Election Night", ready ? B_GOLD : B_OFF, ready ? () -> { elect32(game, t); nightT0 = -1; nightAll = false; SaveGame.save(u, SaveGame.AUTO); } : null, ready ? null : "Hold all three debates first.");
+            }
+            // where the race stands
+            double rx = 1080, rw = DW - 48 - rx;
+            u.panel(g, rx, 124, rw, 690, "Where the race stands");
+            double pm = projection(t) + t.pollErr;
+            text(g, pm >= 0 ? "You lead by " + fmt1(pm) : t.oppLast + " leads by " + fmt1(-pm), rx + 20, 172, F_H2, pm >= 0 ? C_GOOD : C_BAD);
+            text(g, "National polling average", rx + 20, 194, F_XS, C_DIM);
+            int[] ev = ev2030();
+            int me = 0;
+            double[] m = new double[NS];
+            for (int s = 0; s < NS; s++) { m[s] = stateMargin(t, s, pm); if (mine(t, m[s])) me += ev[s]; }
+            text(g, "Projected electoral votes: you " + me + ", " + t.oppLast + " " + (538 - me), rx + 20, 222, F_S, Color.white);
+            text(g, "2030 census map: Texas 42, Florida 33, California 50.", rx + 20, 244, F_T, C_DIM);
+            senateMap(u, g, game, m, rx + 10, 270, rw - 20, 380);
+            u.button(g, 48, 832, 220, 44, "Main menu", B_GHOST, () -> { SaveGame.save(u, SaveGame.AUTO); u.go(SC_HOME); });
+        }
+
+        static void night(Battleground2028 u, Graphics2D g, Game game, Term t) {
+            if (nightT0 < 0) nightT0 = u.tsec;
+            double el = nightAll ? 1e6 : u.tsec - nightT0, hour = 18.8 + el * 0.8;
+            Screens.header(u, g, "Election Night 2032", "Tuesday, November 2, 2032");
+            int[] ev = ev2030();
+            int me = 0, op = 0, shown = 0;
+            double[] f = USMap.fit(48, 170, 1050, 620);
+            for (int s = 0; s < NS; s++) {
+                boolean in = STATES[s].close <= hour;
+                if (in) { shown++; if (mine(t, t.m32[s])) me += ev[s]; else op += ev[s]; }
+                USMap.cur[s] = in ? marginColor(t.m32[s], 1) : C_STATE;
+            }
+            Night.fitDraw(u, g, f);
+            double px = 1116, pw = DW - 48 - px;
+            u.panel(g, px, 124, pw, 690, "Electoral votes");
+            text(g, t.presLast + " (you)", px + 20, 180, F_H3, partyColor(t.party));
+            text(g, String.valueOf(me), px + 20, 236, F_NUMXL, Color.white);
+            text(g, t.oppLast, px + 20, 300, F_H3, partyColor(t.oppParty));
+            text(g, String.valueOf(op), px + 20, 356, F_NUMXL, Color.white);
+            text(g, "270 to win", px + 20, 392, F_XS, C_DIM);
+            boolean all = shown >= NS;
+            if (me >= 270 || op >= 270 || all) {
+                boolean w = all ? t.reelected : me >= 270;
+                text(g, w ? "Four more years." : t.oppLast + " wins.", px + 20, 450, F_H2, w ? C_GOLD : C_BAD);
+                wrap(g, me == 269 && op == 269 ? "A 269-269 tie. The new House decides, one vote per state, and picks " + (w ? "you." : t.oppName + ".")
+                        : w ? "The networks call the race: you have been re-elected." : "The networks call the race for " + t.oppName + ". You will leave office in January.", px + 20, 474, pw - 40, F_S, C_TEXT);
+            }
+            if (all) {
+                text(g, "Popular vote: you " + fmt1(t.pop32P) + "%", px + 20, 560, F_S, C_TEXT);
+                text(g, "House: " + seats(t.houseD32, 435), px + 20, 586, F_S, C_TEXT);
+                text(g, "Senate: " + seats(t.senateD32, 100), px + 20, 612, F_S, C_TEXT);
+            }
+            if (!all) u.button(g, DW - 48 - 300, 832, 300, 44, "Skip to the end", B_NORM, () -> nightAll = true);
+            else u.button(g, DW - 48 - 300, 832, 300, 44, "One year later", B_GOLD, () -> finish(u, game, t));
+        }
+
+        static void epilogueScreen(Battleground2028 u, Graphics2D g) {
+            Game game = u.game;
+            Term t = game != null ? game.term : null;
+            if (t == null) { u.go(SC_HOME); return; }
+            record(game, t);
+            boolean lost = t.lost2028;
+            String title = lost ? "One Year Later" : t.reelected ? "Four More Years" : "A One-Term President";
+            Screens.header(u, g, title, lost ? "November 2029" : "November 2033, one year after the election");
+            u.panel(g, 48, 124, 880, 690, lost ? "Where things stand" : "The " + t.presLast + " years");
+            double y = 168;
+            for (String[] sec : t.epi) {
+                if (y > 780) break;
+                if (sec[0].length() > 0) { label(g, sec[0], 68, y, C_GOLD); y += 18; }
+                for (String line : sec[1].split("\n")) { if (line.length() == 0) continue; y += 4 + wrap(g, line, 68, y, 840, F_XS, C_TEXT); }
+                y += 14;
+            }
+            double px = 944, pw = DW - 48 - px;
+            Term a = lost ? t.next : t;
+            u.panel(g, px, 124, pw, 690, lost && a != null ? "President " + a.presLast + "'s approval" : "Your approval over four years");
+            if (a != null) {
+                double[] v = a.appHist;
+                int n = a.nHist;
+                chart(g, px + 46, 170, pw - 66, 200, v, n, 30, 70, C_GOLD, lost ? 4 : 16);
+                if (lost) { String[] qs = {"Jan 2029", "Spring", "Summer", "Fall", "Nov 2029"}; for (int i = 0; i < 5; i++) textC(g, qs[i], px + 46 + (pw - 66) * i / 4.0, 392, F_T, C_DIM); }
+                else for (int yr = 0; yr < 4; yr++) textC(g, String.valueOf(2029 + yr), px + 46 + (pw - 66) * (yr * 4 + 2) / 16.0, 392, F_T, C_DIM);
+            }
+            if (lost && a != null) {
+                String[][] rows = {{"New laws", String.valueOf(laws(a))}, {"Approval now", Math.round(a.approval) + "%"}, {"Unemployment", fmt1(a.unemp) + "%"}, {"Inflation", fmt1(a.inflation) + "%"},
+                        {"House", seats(a.houseD, 435)}, {"Senate", seats(a.senateD, 100)}};
+                double yy = 440;
+                for (String[] rw : rows) { text(g, rw[0], px + 20, yy, F_S, C_TEXT); textR(g, rw[1], px + pw - 20, yy, F_BB, Color.white); yy += 30; }
+            }
+            if (!lost) {
+                String[][] rows = {{"Laws and orders", String.valueOf(laws(t))}, {"Approval at the end", Math.round(t.approval) + "%"}, {"2032 electoral votes", t.ev32P + " - " + t.ev32O},
+                        {"Historians' early rank", ordinal(rank(t)) + " of 47"}, {"Presidency score", thousands(score(t))}};
+                double yy = 440;
+                for (String[] rw : rows) { text(g, rw[0], px + 20, yy, F_S, C_TEXT); textR(g, rw[1], px + pw - 20, yy, F_BB, Color.white); yy += 30; }
+                List<String> e = new ArrayList<String>();
+                earned(game, e);
+                if (!e.isEmpty()) {
+                    label(g, "Achievements", px + 20, yy + 16, C_GOLD);
+                    yy += 36;
+                    for (String id : e) { text(g, Legacy.achName(id), px + 20, yy, F_XSB, Color.white); yy += 20; }
+                }
+            }
+            u.button(g, 48, 832, 220, 44, "Main menu", B_GHOST, () -> u.go(SC_HOME));
+            u.button(g, DW / 2 - 150, 832, 300, 44, "Hall of Fame", B_NORM, () -> u.go(SC_HALL));
+            u.button(g, DW - 48 - 260, 832, 260, 44, "New campaign", B_GOLD, () -> { u.setup = new Settings(); u.go(SC_SETUP); });
+        }
+    }
 
     // =====================================================================
     //  MAIN
@@ -17668,6 +18929,12 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 for (int i = 0; i < ids.length; i++) Portrait.draw(g, candById(ids[i]), 10 + i * 410, 10, 400, 480, 0.7 + i, 0.6, false, true);
                 g.dispose();
                 try { javax.imageio.ImageIO.write(img, "png", new File(a[1])); } catch (IOException e) { e.printStackTrace(); }
+            }
+            if (what.equals("govern")) {
+                int runs = a.length > 1 ? Integer.parseInt(a[1]) : 1;
+                String cand = a.length > 2 ? a[2] : "shapiro";
+                int scen = a.length > 3 ? Integer.parseInt(a[3]) : SC_BASE;
+                for (int r = 0; r < runs; r++) govern(3000 + r, cand, scen);
             }
             if (what.equals("batch")) {
                 Settings s = new Settings();
@@ -17855,6 +19122,42 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 Night.clock = 10; Night.update(u, 0.1); Night.finale = false; Night.mapView = 0; shot(u, dir, "v3_night_end");
                 u.go(SC_END); shot(u, dir, "v3_end");
                 u.go(SC_HALL); shot(u, dir, "v3_hall");
+                u.game = null;
+            }
+            if (all || which.contains("v4")) {
+                Settings gs = new Settings();
+                gs.mode = MODE_GENERAL; gs.candId = "shapiro"; gs.party = DEM; gs.seed = 3001; Arrays.fill(gs.staff, true);
+                u.setup = gs;
+                Game gg = Setup.newGame(gs);
+                while (gg.phase != PH_OVER && gg.week <= ELECTION_WEEK) {
+                    autoPending(gg);
+                    for (Debate d : Debates.thisWeek(gg)) { DebateRun run = Debates.start(gg, d); while (!run.over) Debates.segment(gg, run, run.myIdx >= 0 ? Debates.aiTactic(gg, run, run.myIdx) : -1); }
+                    Week.resolve(gg);
+                }
+                autoPending(gg);
+                u.game = gg;
+                u.modal = null;
+                u.go(SC_END); shot(u, dir, "v4_end");
+                Govern.begin(u);
+                Term tt = gg.term;
+                for (int k : new int[]{0, 5, 11}) tt.bills.get(k).priority = true;
+                shot(u, dir, "v4_agenda");
+                tt.stage = Govern.ST_DESK; tt.pick = 0; tt.approach = Govern.AP_RECON;
+                shot(u, dir, "v4_desk");
+                Govern.act(gg, tt, 0, Govern.AP_RECON, false); tt.pick = -1;
+                while (tt.q < 8) Govern.aiQuarter(gg, tt);
+                tt.stage = Govern.ST_MIDTERM; u.modal = null; shot(u, dir, "v4_midterm");
+                tt.stage = Govern.ST_AGENDA2; shot(u, dir, "v4_agenda2");
+                tt.stage = Govern.ST_DESK;
+                while (tt.q < 14) Govern.aiQuarter(gg, tt);
+                u.modal = null; u.modalQueue.clear();
+                shot(u, dir, "v4_camp1");
+                tt.stage = Govern.ST_CAMP2; Govern.holdDebate(gg, tt, 0); shot(u, dir, "v4_camp2");
+                Govern.holdDebate(gg, tt, 1); Govern.holdDebate(gg, tt, 2);
+                Govern.elect32(gg, tt); Govern.nightAll = true; shot(u, dir, "v4_night");
+                Govern.wrapUp(gg, tt); u.go(SC_EPILOGUE); shot(u, dir, "v4_epilogue");
+                gg.term = null; gg.evD = 200; gg.evR = 338; u.go(SC_END); shot(u, dir, "v4_end_lost");
+                Govern.oneYearLater(u); shot(u, dir, "v4_epilogue_lost");
                 u.game = null;
             }
             if (all || which.contains("brief")) { Screens.briefTopic = 7; u.go(SC_BRIEF); shot(u, dir, "ui_brief"); Screens.briefTopic = 9; shot(u, dir, "ui_brief_sources"); }
@@ -18085,6 +19388,49 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 if (k.equals("primonly")) s.primaryOnly = true;
                 if (k.equals("role")) s.role = Integer.parseInt(v);
             }
+        }
+
+        /** A Labor Day general election, then four years in office (or the year after a loss) on autopilot. */
+        static void govern(long seed, String cand, int scen) {
+            Settings set = new Settings();
+            set.mode = MODE_GENERAL; set.candId = cand; set.scenario = scen; set.seed = seed; set.party = candById(cand).party;
+            Arrays.fill(set.staff, true);
+            Game g = Setup.newGame(set);
+            while (g.phase != PH_OVER && g.week <= ELECTION_WEEK) {
+                autoPending(g);
+                for (Debate d : Debates.thisWeek(g)) { DebateRun run = Debates.start(g, d); while (!run.over) Debates.segment(g, run, run.myIdx >= 0 ? Debates.aiTactic(g, run, run.myIdx) : -1); }
+                Week.resolve(g);
+            }
+            autoPending(g);
+            Camp me = g.me();
+            boolean won = Legacy.won(g);
+            System.out.println("=== seed " + seed + " 2028: " + me.name() + (won ? " wins " : " loses ") + g.evD + "-" + g.evR + ", House D " + g.houseSeatsD + ", Senate D " + General.senateSeats(g));
+            Term t;
+            if (!won) t = Govern.lossTerm(g);
+            else {
+                t = Govern.start(g, me);
+                Govern.aiPriorities(g, t);
+                t.stage = Govern.ST_DESK;
+                while (t.q < 14) Govern.aiQuarter(g, t);
+                for (int i = 0; i < 3; i++) { t.debate[i] = t.approval >= 48 ? 0 : 2; Govern.holdDebate(g, t, i); }
+                t.stage = Govern.ST_CAMP2;
+                Govern.elect32(g, t);
+                Govern.wrapUp(g, t);
+            }
+            g.term = t;
+            if (!t.lost2028) {
+                StringBuilder ap = new StringBuilder();
+                for (int i = 0; i < t.nHist; i++) ap.append(Math.round(t.appHist[i])).append(' ');
+                System.out.println("  approval " + ap + "| laws " + Govern.laws(t) + " (" + Govern.names(t) + ")");
+                System.out.println("  midterm: president's party " + margin(t.midMargin) + ", House D " + t.houseD30 + ", Senate D " + t.senateD30 + (t.filibusterGone ? ", filibuster gone" : ""));
+                System.out.println("  2032 vs " + t.oppName + ": " + t.ev32P + "-" + t.ev32O + " (" + fmt1(t.pop32P) + "%), " + (t.reelected ? "RE-ELECTED" : "defeated") + ", House D " + t.houseD32 + ", Senate D " + t.senateD32 + ", score " + Govern.score(t) + ", rank " + Govern.rank(t));
+            }
+            for (String[] e : t.epi) System.out.println("  [" + e[0] + "] " + e[1].replace("\n", " / "));
+            List<String> ach = new ArrayList<String>();
+            Govern.earned(g, ach);
+            StringBuilder ab = new StringBuilder();
+            for (String x : ach) ab.append(ab.length() > 0 ? ", " : "").append(x);
+            if (!ach.isEmpty()) System.out.println("  achievements " + ab);
         }
 
         static void game(long seed, int mode, String cand, int scen, boolean verbose) {

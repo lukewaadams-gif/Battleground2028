@@ -1619,6 +1619,7 @@ this.startEnv = 0;
 this.recorded = false;
 this.contestPending = -1;
 this.resumePhase = PH_PRIMARY;
+this.term = null;
 this.dApp = 0;
 this.dUnemp = 0;
 this.dInfl = 0;
@@ -12073,6 +12074,10 @@ u.button$8(g, ((DW - 48) - 260), 832, 260, 44, "New campaign", B_GOLD, () => {
 u.setup = new Settings();
 u.go(SC_SETUP);
 });
+if ((((game.result != null) && (me != null)) && !game.set.primaryOnly)) {
+let bx = 900, bw = ((DW - 48) - 900);
+if (((won && (game.set.role !== ROLE_WATCH)) && (((game.term == null) || !game.term.lost2028)))) { u.button$9(g, bx, 764, bw, 50, ((game.term != null) ? "Back to the White House" : "Take the oath: govern 2029-2032"), B_GOLD, () => (Govern.begin(u)), "Set an agenda and fight for it in Congress, live with the 2030 midterms, then run for re-election in 2032."); } else { if ((!won || (game.set.role === ROLE_WATCH))) { u.button$9(g, bx, 764, bw, 50, "One year later", B_PRIMARY, () => (Govern.oneYearLater(u)), "What happened next: the new president's first year, and yours."); } }
+}
 }
 static debatesDone(g, me) {
 let n = 0;
@@ -12163,6 +12168,10 @@ if ((g.spectator && (g.phase !== PH_OVER))) { Hq.fastForward = true; }
 Hq.sel = (((g.me() != null) && (g.me().c.home >= 0)) ? g.me().c.home : -1);
 Hq.mapMode = ((g.phase <= PH_PRIMARY) ? MM_CAL : MM_PUBLIC);
 Hq.primCacheWeek = -1;
+if ((g.term != null)) {
+u.go(((g.term.stage === Govern.ST_DONE) ? SC_EPILOGUE : SC_GOVERN));
+return;
+}
 if (((g.phase === PH_OVER) && (g.result != null))) {
 Night.start(u);
 return;
@@ -15283,6 +15292,7 @@ if ((win && (g.set.difficulty === 2))) { l.add("hard"); }
 if (((win && (me.party <= REP)) && ((g.startEnv * (((me.party === DEM) ? 1 : -1))) <= -3))) { l.add("underdog"); }
 if ((me.pressGood >= 6)) { l.add("press"); }
 if ((me.convScore >= 0.85)) { l.add("oratory"); }
+Govern.earned(g, l);
 return l;
 }
 static achName(id) {
@@ -16162,6 +16172,1585 @@ u.go(SC_SETUP);
 if (!Batch.running) { u.button$8(g, ((DW - 48) - 300), 832, 300, 44, "Run another 100", B_GOLD, () => (Batch.start(u, Batch.mode))); }
 }
 }
+class Pol {
+constructor(party, name, desc, support, unity, cross, recon, exec, gdp, unemp, infl, impact, base, fmt) {
+this.party = 0;
+this.fmt = 0;
+this.name = null;
+this.desc = null;
+this.impact = null;
+this.support = 0;
+this.unity = 0;
+this.cross = 0;
+this.gdp = 0;
+this.unemp = 0;
+this.infl = 0;
+this.base = 0;
+this.recon = false;
+this.exec = false;
+{
+this.party = party;
+this.name = name;
+this.desc = desc;
+this.support = support;
+this.unity = unity;
+this.cross = cross;
+this.recon = recon;
+this.exec = exec;
+this.gdp = gdp;
+this.unemp = unemp;
+this.infl = infl;
+this.impact = impact;
+this.base = base;
+this.fmt = fmt;
+}
+}
+}
+class Bill {
+constructor() {
+this.id = 0;
+this.status = 0;
+this.quarter = -1;
+this.tries = 0;
+this.strength = 0;
+this.priority = false;
+this.second = false;
+}
+}
+class Term {
+constructor() {
+this.party = 0;
+this.list = 0;
+this.oppParty = -1;
+this.presName = "";
+this.presLast = "";
+this.presId = null;
+this.vpName = "";
+this.oppName = "";
+this.oppLast = "";
+this.oppId = null;
+this.challenger = null;
+this.q = 0;
+this.stage = 0;
+this.approval = 0;
+this.unemp = 0;
+this.inflation = 0;
+this.gdp = 0;
+this.approval0 = 0;
+this.unemp0 = 0;
+this.inflation0 = 0;
+this.gdp0 = 0;
+this.shock = 0;
+this.houseD = 0;
+this.senateD = 0;
+this.houseD0 = 0;
+this.senateD0 = 0;
+this.houseD30 = -1;
+this.senateD30 = -1;
+this.houseD32 = -1;
+this.senateD32 = -1;
+this.filibusterGone = false;
+this.voted = false;
+this.lost2028 = false;
+this.reelected = false;
+this.recorded = false;
+this.ai = false;
+this.reconYear = -1;
+this.capital = 2;
+this.pick = -1;
+this.approach = 0;
+this.focus = 1;
+this.flags = 0;
+this.lastH = 0;
+this.lastS = 0;
+this.goPublic = false;
+this.bills = [];
+this.log = [];
+this.appHist = $arr(24, 0);
+this.nHist = 0;
+this.m28 = $arr(NS, 0);
+this.w28 = $arr(NS, 0);
+this.sen30 = null;
+this.sen32 = null;
+this.m32 = null;
+this.nat28 = 0;
+this.pm28 = 0;
+this.partyBuild = 0;
+this.warChest = 0;
+this.enthusiasm = 0;
+this.midMargin = 0;
+this.primaryHit = 0;
+this.pollErr = 0;
+this.theme = 0;
+this.budget = 0;
+this.closing = 0;
+this.debatesHeld = 0;
+this.ev32P = 0;
+this.ev32O = 0;
+this.partisan = 0;
+this.debate = $arr(3, 0);
+this.debScore = $arr(3, 0);
+this.focusSt = $arr(NS, false);
+this.nat32 = 0;
+this.pop32P = 0;
+this.epi = [];
+this.next = null;
+}
+}
+class Govern {
+static when(q) {
+return ((Govern.SEASON[(q % 4)] + " ") + ((2029 + $idiv(q, 4))));
+}
+static year(q) {
+return (2029 + $idiv(q, 4));
+}
+static plural(p) {
+return ((p === DEM) ? "Democrats" : ((p === REP) ? "Republicans" : "independents"));
+}
+static ownH(t) {
+return ((t.list === DEM) ? t.houseD : (435 - t.houseD));
+}
+static ownS(t) {
+return ((t.list === DEM) ? t.senateD : (100 - t.senateD));
+}
+static norm(z) {
+return (1 / ((1 + Math.exp((-1.702 * z)))));
+}
+static log(t, s) {
+t.log.add(((Govern.when(Math.min(t.q, 15)) + ": ") + s));
+}
+static impact(p, strength) {
+let v = ((p.fmt === 2) ? p.base : (p.base * strength));
+let n = ((p.fmt === 1) ? fmt1(v) : ((p.fmt === 2) ? String(Math.round(v)) : thousands(Math.round(v))));
+return $replace(p.impact, "#", n);
+}
+static start(g, k) {
+let t = new Term();
+t.party = k.party;
+t.list = (((k.party === DEM) || (k.party === REP)) ? k.party : ((((k.c.econ + k.c.cult) <= 0) ? DEM : REP)));
+t.presName = k.name();
+t.presLast = k.last();
+t.presId = k.c.id;
+let vp = g.vpOf(k.party);
+t.vpName = ((vp != null) ? vp.name() : "");
+let tot = Math.max(1, ((g.popD + g.popR) + g.popO));
+t.nat28 = ((((g.popD - g.popR)) / tot) * 100);
+for (let s = 0; (s < NS); s++) {
+t.m28[s] = Vote.margin(g.result[s]);
+t.w28[s] = ((g.result[s][0] + g.result[s][1]) + g.result[s][2]);
+}
+t.pm28 = Legacy.myMargin(g, k);
+t.approval = t.approval0 = clamp((52 + (0.45 * t.pm28)), 44, 61);
+t.unemp = t.unemp0 = g.unemp;
+t.inflation = t.inflation0 = g.inflation;
+t.gdp = t.gdp0 = g.gdp;
+t.houseD = t.houseD0 = ((g.houseSeatsD >= 0) ? g.houseSeatsD : Math.round(g.houseD));
+t.senateD = t.senateD0 = General.senateSeats(g);
+for (let i = 0; (i < Govern.POL.length); i++) { if ((Govern.POL[i].party === t.list)) {
+let b = new Bill();
+b.id = i;
+t.bills.add(b);
+} }
+t.appHist[t.nHist++] = t.approval;
+t.stage = Govern.ST_AGENDA;
+Govern.log(t, (((t.presName + " takes the oath of office. Approval ") + Math.round(t.approval)) + "%."));
+return t;
+}
+static successor(g, party, name, last, prior, houseD, senateD, unemp, infl, gdp, popMargin, q0) {
+let t = new Term();
+t.ai = true;
+t.party = party;
+t.list = (((party === DEM) || (party === REP)) ? party : DEM);
+t.presName = name;
+t.presLast = last;
+t.approval = t.approval0 = clamp((52 + (0.45 * popMargin)), 44, 61);
+t.unemp = t.unemp0 = unemp;
+t.inflation = t.inflation0 = infl;
+t.gdp = t.gdp0 = gdp;
+t.houseD = t.houseD0 = houseD;
+t.senateD = t.senateD0 = senateD;
+t.q = q0;
+for (let i = 0; (i < Govern.POL.length); i++) { if ((Govern.POL[i].party === t.list)) {
+let b = new Bill();
+b.id = i;
+if (((prior != null) && (prior.list === t.list))) { for (const x of prior.bills) { if (((x.id === i) && (((x.status === 1) || (x.status === 3))))) {
+b.status = x.status;
+b.strength = x.strength;
+b.quarter = x.quarter;
+} } }
+t.bills.add(b);
+} }
+Govern.aiPriorities(g, t);
+t.appHist[t.nHist++] = t.approval;
+t.stage = Govern.ST_DESK;
+for (let i = 0; (i < 4); i++) { Govern.aiQuarter(g, t); }
+return t;
+}
+static priorities(t, second) {
+let n = 0;
+for (const b of t.bills) { if ((b.priority && (b.second === second))) { n++; } }
+return n;
+}
+static laws(t) {
+let n = 0;
+for (const b of t.bills) { if (((b.status === 1) || (b.status === 3))) { n++; } }
+return n;
+}
+static reconOk(t, p) {
+return (p.recon && (t.reconYear !== Govern.year(t.q)));
+}
+static whip(t, p, ap, pub) {
+let own = p.unity, oth = p.cross;
+if ((ap === Govern.AP_DEAL)) {
+let dealable = clamp((p.cross * 3), 0, 1);
+let divided = ((Govern.ownH(t) < 218) || (Govern.ownS(t) < 50));
+own = Math.min(0.99, (own + 0.03));
+oth = Math.min(0.85, (oth + (((divided ? 0.18 : 0.3)) * dealable)));
+}
+oth *= Math.max(0.5, (1 - (0.07 * t.partisan)));
+if (pub) {
+own = Math.min(0.995, (own + 0.025));
+oth = Math.min(0.9, (oth + 0.03));
+}
+let ap2 = (((t.approval - 46)) * 0.004);
+if ((t.q >= 12)) { oth *= 0.6; }
+own = clamp((own + (ap2 * 0.5)), 0.3, 0.995);
+oth = clamp((oth + ap2), 0, 0.9);
+if ((t.party !== t.list)) {
+own *= 0.88;
+oth = Math.min(0.9, (oth + 0.08));
+}
+let oh = Govern.ownH(t), os = Govern.ownS(t);
+let eH = ((oh * own) + (((435 - oh)) * oth)), eS = ((os * own) + (((100 - os)) * oth));
+let sdH = (Math.sqrt((((oh * own) * ((1 - own))) + ((((435 - oh)) * oth) * ((1 - oth))))) + 2.5);
+let sdS = (Math.sqrt((((os * own) * ((1 - own))) + ((((100 - os)) * oth) * ((1 - oth))))) + 0.9);
+let need = ((t.filibusterGone || (ap === Govern.AP_RECON)) ? 50 : 60);
+let blocked = ((ap === Govern.AP_EXEC) ? 0 : (((oh < 218) && (oth < 0.3)) ? 1 : (((os < 50) && (oth < 0.25)) ? 2 : 0)));
+let pr = ((ap === Govern.AP_EXEC) ? 1 : ((blocked > 0) ? 0 : (Govern.norm((((eH - 217.5)) / sdH)) * Govern.norm(((((eS - need) + 0.5)) / sdS)))));
+return [eH, sdH, eS, sdS, need, pr, blocked];
+}
+static available(t, p, ap) {
+if ((ap === Govern.AP_RECON)) { return Govern.reconOk(t, p); }
+if ((ap === Govern.AP_EXEC)) { return p.exec; }
+return true;
+}
+static filibusterOdds(t) {
+let os = Govern.ownS(t);
+if (((os < 50) || (t.party !== t.list))) { return 0; }
+let e = (os * 0.93), sd = (Math.sqrt(((os * 0.93) * 0.07)) + 0.6);
+return Govern.norm((((e - 49.5)) / sd));
+}
+static act(g, t, pick, ap, pub) {
+let r = g.rng;
+t.voted = true;
+if ((pub && (t.capital > 0))) { t.capital--; } else { pub = false; }
+if ((pick === Govern.PICK_FILIBUSTER)) {
+let os = Govern.ownS(t);
+let yes = 0;
+for (let i = 0; (i < os); i++) { if ((r.nextDouble() < 0.93)) { yes++; } }
+t.lastH = -1;
+t.lastS = yes;
+if ((yes >= 50)) {
+t.filibusterGone = true;
+t.approval -= 0.8;
+t.enthusiasm += 0.6;
+Govern.log(t, (((("The Senate ends the legislative filibuster, " + yes) + " votes to ") + ((100 - yes))) + ". Bills now need only a majority."));
+return true;
+}
+t.approval -= 0.6;
+Govern.log(t, (("The push to end the filibuster fails: " + ((os - yes))) + " senators of your own party vote no."));
+return false;
+}
+let b = t.bills[pick];
+let p = Govern.POL[b.id];
+b.tries++;
+if ((ap === Govern.AP_EXEC)) {
+b.status = 3;
+b.strength = 0.45;
+b.quarter = t.q;
+t.approval += ((((p.support - 50)) * 0.02) + 0.1);
+Govern.log(t, (("By executive order: " + p.name) + ". It will face challenges in court."));
+return true;
+}
+let w = Govern.whip(t, p, ap, pub);
+if ((w[6] > 0)) {
+b.status = 2;
+t.approval -= 0.3;
+t.lastH = -1;
+t.lastS = -1;
+Govern.log(t, ((((((w[6] === 1) ? "The Speaker" : "The Senate majority leader")) + " refuses to bring ") + p.name) + " to the floor."));
+return false;
+}
+let h = Math.round(clamp((w[0] + (r.nextGaussian() * w[1])), 0, 435)), s = Math.round(clamp((w[2] + (r.nextGaussian() * w[3])), 0, 100));
+t.lastH = h;
+t.lastS = s;
+let pass = ((h >= 218) && (s >= w[4]));
+if ((ap === Govern.AP_RECON)) { t.reconYear = Govern.year(t.q); }
+if (pass) {
+b.status = 1;
+b.quarter = t.q;
+b.strength = ((ap === Govern.AP_DEAL) ? 0.6 : 1);
+if ((ap !== Govern.AP_DEAL)) { t.partisan++; }
+t.approval += (((((p.support - 50)) * 0.05) * b.strength) + 0.4);
+t.enthusiasm += ((ap === Govern.AP_DEAL) ? -0.3 : (b.priority ? 0.5 : 0.2));
+Govern.log(t, ((((((((((p.name + (((ap === Govern.AP_DEAL) ? " passes as a bipartisan compromise" : " passes"))) + ": House ") + h) + "-") + ((435 - h))) + ", Senate ") + s) + "-") + ((100 - s))) + ". The president signs it."));
+snd$1(Sfx.CHEER);
+} else {
+b.status = 2;
+t.approval -= (b.priority ? 0.9 : 0.5);
+let why = ((h < 218) ? ((("dies in the House, " + h) + "-") + ((435 - h))) : (((s >= 50) && (w[4] > 50)) ? (((("is filibustered: " + s) + " senators vote to end debate, ") + $i(w[4])) + " needed") : ((("fails in the Senate, " + s) + "-") + ((100 - s)))));
+Govern.log(t, (((p.name + " ") + why) + "."));
+}
+return pass;
+}
+static endQuarter(g, t) {
+let r = g.rng;
+if ((t.focus === 0)) {
+t.approval += (((t.unemp > 5) || (t.inflation > 3)) ? 0.6 : 0.2);
+t.gdp += 0.1;
+}
+if ((t.focus === 1)) {
+t.approval += 0.7;
+t.partyBuild += 0.2;
+}
+if ((t.focus === 2)) {
+t.approval += 0.3;
+}
+if ((t.focus === 3)) {
+t.partyBuild += 1;
+if ((t.q >= 8)) { t.warChest += 1; }
+}
+let gT = 2.0, uT = 4.5, iT = 2.5;
+for (const b of t.bills) { if (((b.status === 1) || (b.status === 3))) {
+let p = Govern.POL[b.id];
+gT += (p.gdp * b.strength);
+uT += (p.unemp * b.strength);
+iT += (p.infl * b.strength);
+} }
+if (((t.shock === 0) && (r.nextDouble() < 0.05))) {
+t.shock = 3.0;
+Govern.log(t, "The economy tips into recession.");
+}
+t.gdp += (((((gT - t.shock) - t.gdp)) * 0.35) + (r.nextGaussian() * 0.55));
+t.unemp += ((((((uT + (t.shock * 0.5)) - t.unemp)) * 0.25) - (((t.gdp - 2)) * 0.06)) + (r.nextGaussian() * 0.15));
+t.inflation += ((((iT - t.inflation)) * 0.3) + (r.nextGaussian() * 0.25));
+t.shock = ((t.shock < 0.3) ? 0 : (t.shock * 0.55));
+t.gdp = clamp(t.gdp, -5, 6);
+t.unemp = clamp(t.unemp, 3, 11);
+t.inflation = clamp(t.inflation, -0.5, 9);
+let target = (((45 + (1.6 * ((t.gdp - 2)))) - (1.4 * ((t.unemp - 4.5)))) - (1.2 * ((t.inflation - 2.5))));
+t.approval += ((((target - t.approval)) * 0.3) + (r.nextGaussian() * 1.0));
+t.approval = clamp(t.approval, 26, 70);
+t.enthusiasm *= 0.9;
+t.capital = Math.min(3, (t.capital + 1));
+t.voted = false;
+t.goPublic = false;
+if ((t.nHist < t.appHist.length)) { t.appHist[t.nHist++] = t.approval; }
+t.q++;
+if (((t.q === 8) && (t.houseD30 < 0))) { Govern.midterm(g, t); }
+if (((t.q === 12) && !t.ai)) { Govern.primaryCheck(g, t); }
+if (((t.q === 14) && !t.ai)) {
+t.stage = Govern.ST_CAMP1;
+Govern.opponent(g, t);
+}
+}
+static primaryCheck(g, t) {
+if ((t.approval >= 41)) { return; }
+let best = null;
+let bv = -1;
+for (const c of ROSTER) { if ((((c.party === t.party) && !$eq(c.id, t.presId)) && !c.custom)) {
+let v = ((c.a[A_CHA] + c.a[A_BAS]) + (g.rng.nextDouble() * 30));
+if ((v > bv)) {
+bv = v;
+best = c;
+}
+} }
+if ((best == null)) { return; }
+t.challenger = best.name();
+t.primaryHit = (((41 - t.approval)) * 0.2);
+t.approval -= 1;
+Govern.log(t, (((best.name() + " challenges you for the ") + PARTY[t.party]) + " nomination. You win the primaries, but the fight leaves scars."));
+}
+static lean28(t, s) {
+return (t.m28[s] - t.nat28);
+}
+static seatsD(marginD, r) {
+return clampi(Math.round(((210 + (3.8 * marginD)) + (r.nextGaussian() * 5))), 120, 330);
+}
+static midterm(g, t) {
+let r = g.rng;
+let mP = (((((((0.5 * ((t.approval - 50))) - 2.5) + (0.4 * ((t.gdp - 2)))) - (0.3 * ((t.unemp - 4.5)))) + (0.3 * Math.min(4, t.partyBuild))) + (0.4 * t.enthusiasm)) + (r.nextGaussian() * 1.8));
+t.midMargin = mP;
+let natD = ((t.party === DEM) ? mP : ((t.party === REP) ? -mP : (((t.nat28 * 0.3) + (r.nextGaussian() * 3)))));
+t.houseD30 = Govern.seatsD(natD, r);
+t.sen30 = $arr(NS, 0);
+t.sen30.fill(NaN);
+let dUp = 0, dWon = 0;
+for (const tok of $split(Govern.CLASS1, " ")) {
+let p = $split(tok, ":");
+let s = stateIdx(p[0]);
+let dHeld = $eq(p[1], "D");
+if (dHeld) { dUp++; }
+let m = (((Govern.lean28(t, s) + natD) + ((dHeld ? 3 : -3))) + (r.nextGaussian() * 3.5));
+t.sen30[s] = m;
+if ((m > 0)) { dWon++; }
+}
+t.senateD30 = clampi(((t.senateD - dUp) + dWon), 0, 100);
+let hB = Govern.ownH(t), sB = Govern.ownS(t);
+t.houseD = t.houseD30;
+t.senateD = t.senateD30;
+Govern.log(t, ((((("Midterms: the " + (((t.party === IND) ? "national House vote" : "president's party"))) + " ") + (((t.party === IND) ? margin(natD) : (((((mP >= 0) ? "wins the House vote by " : "loses the House vote by ")) + fmt1(Math.abs(mP))) + " points")))) + ". ") + (((t.party === IND) ? "" : (((((((((Govern.plural(t.list) + " go from ") + hB) + " to ") + Govern.ownH(t)) + " House seats and from ") + sB) + " to ") + Govern.ownS(t)) + " senators.")))));
+t.stage = Govern.ST_MIDTERM;
+t.capital = 2;
+t.partyBuild = 0;
+}
+static opponent(g, t) {
+let r = g.rng;
+t.oppParty = ((t.party === DEM) ? REP : ((t.party === REP) ? DEM : (((t.houseD >= 218) ? DEM : REP))));
+let last = g.nominee(t.oppParty);
+let best = null;
+let bv = -1;
+for (const c of ROSTER) {
+if (((c.party !== t.oppParty) || c.custom)) { continue; }
+if ((((last != null) && $eq(c.id, last.c.id)) && !(((Math.abs(t.pm28) < 2.5) && (r.nextDouble() < 0.4))))) { continue; }
+let v = ((((c.a[A_CHA] + c.a[A_DEB]) + c.a[A_SPE]) + (c.a[A_EST] * 0.5)) + (r.nextDouble() * 70));
+if ((v > bv)) {
+bv = v;
+best = c;
+}
+}
+if ((best == null)) { best = ((last != null) ? last.c : ROSTER[0]); }
+t.oppId = best.id;
+t.oppName = best.name();
+t.oppLast = best.last;
+t.pollErr = (r.nextGaussian() * 1.5);
+t.theme = ((t.approval >= 48) ? 0 : ((t.approval >= 44) ? 1 : 2));
+t.budget = 2;
+t.closing = ((t.gdp > 2.5) ? 0 : 1);
+for (let i = 0; (i < 3); i++) { t.debate[i] = 0; }
+let bg = Govern.battlegrounds(t);
+for (let i = 0; (i < Math.min(3, bg.length)); i++) { t.focusSt[bg[i]] = true; }
+Govern.log(t, (((best.name() + " wins the ") + PARTY[t.oppParty]) + " nomination to take you on."));
+}
+static opp(t) {
+return ((t.oppId != null) ? candById(t.oppId) : null);
+}
+static themeEff(t) {
+if ((t.theme === 0)) { return ((t.approval >= 50) ? 1.0 : ((t.approval >= 45) ? 0.3 : -0.8)); }
+if ((t.theme === 1)) { return 0.6; }
+return ((t.approval < 45) ? 0.9 : 0.4);
+}
+static budgetNat(t) {
+return [0.35, 0.1, 0.2, 0.3][t.budget];
+}
+static budgetFocus(t) {
+return [1.2, 2.1, 1.6, 1.3][t.budget];
+}
+static closingEff(t) {
+return ((t.closing === 0) ? clamp((0.5 * ((t.gdp - 2))), -1, 1) : ((t.closing === 1) ? 0.4 : (0.3 + (0.2 * t.enthusiasm))));
+}
+static projection(t) {
+let o = Govern.opp(t);
+let oq = ((o == null) ? 0 : (((((o.a[A_CHA] + o.a[A_DEB]) + o.a[A_SPE]) - 195)) * 0.03));
+let m = ((((((((((0.55 * ((t.approval - 47))) + (0.7 * ((t.gdp - 2)))) - (0.5 * ((t.unemp - 4.5)))) - (0.45 * ((t.inflation - 2.5)))) + 1.5) + Govern.themeEff(t)) + Govern.budgetNat(t)) + (0.25 * Math.min(4, t.warChest))) - t.primaryHit) - oq);
+for (let i = 0; (i < t.debatesHeld); i++) { m += (0.3 * t.debScore[i]); }
+if ((t.stage >= Govern.ST_CAMP2)) { m += Govern.closingEff(t); }
+return m;
+}
+static natD(t, incMargin) {
+return ((t.party === DEM) ? incMargin : ((t.party === REP) ? -incMargin : incMargin));
+}
+static stateMargin(t, s, incMargin) {
+let lean = ((t.party === IND) ? (-Math.abs(Govern.lean28(t, s)) * 0.3) : (Govern.lean28(t, s) * 0.9));
+let m = (lean + Govern.natD(t, incMargin));
+if (t.focusSt[s]) { m += ((((t.party === REP) ? -1 : 1)) * Govern.budgetFocus(t)); }
+return m;
+}
+static ev2030() {
+let ev = $arr(NS, 0);
+for (let s = 0; (s < NS); s++) { ev[s] = ((Custom.ev0 != null) ? Custom.ev0[s] : STATES[s].ev); }
+for (const tok of $split(Custom.EV2030, " ")) {
+let p = $split(tok, ":");
+let k = stateIdx(p[0]);
+ev[k] += parseInt(p[1], 10);
+}
+return ev;
+}
+static mine(t, m) {
+return ((t.party === REP) ? (m < 0) : (m > 0));
+}
+static battlegrounds(t) {
+let l = [];
+let pm = (Govern.projection(t) + t.pollErr);
+for (let s = 0; (s < NS); s++) { l.add(s); }
+let tt = t;
+l.sort((a, b) => ($cmp(Math.abs((Govern.stateMargin(tt, a, pm) - ((tt.focusSt[a] ? ((((tt.party === REP) ? -1 : 1)) * Govern.budgetFocus(tt)) : 0)))), Math.abs((Govern.stateMargin(tt, b, pm) - ((tt.focusSt[b] ? ((((tt.party === REP) ? -1 : 1)) * Govern.budgetFocus(tt)) : 0)))))));
+let out = [];
+let ev = Govern.ev2030();
+for (const s of l) {
+if ((ev[s] >= 4)) { out.add(s); }
+if ((out.length >= 10)) { break; }
+}
+return out;
+}
+static holdDebate(g, t, i) {
+if (((i !== t.debatesHeld) || (i > 2))) { return; }
+let r = g.rng;
+let me = candById(t.presId), o = Govern.opp(t);
+let myDeb = ((me != null) ? me.a[A_DEB] : 60), oDeb = ((o != null) ? o.a[A_DEB] : 60), cha = ((me != null) ? me.a[A_CHA] : 60);
+let a = t.debate[i];
+let fit = ((a === 0) ? (((t.approval >= 48) ? 0.6 : -0.4)) : ((a === 1) ? 0.3 : ((a === 2) ? (((t.approval < 48) ? 0.5 : 0.2)) : ((((cha - 60)) / 40.0) + (r.nextGaussian() * 1.2)))));
+let sc = (((((myDeb - oDeb)) / 20.0) + (fit * 0.7)) + (r.nextGaussian() * 0.9));
+if ((i === 0)) { sc -= 0.3; }
+t.debScore[i] = clamp(sc, -2.5, 2.5);
+t.debatesHeld++;
+let pct = Math.round(clamp((50 + (9 * t.debScore[i])), 20, 80));
+Govern.log(t, (((["First", "Second", "Third"][i] + " debate: ") + (((pct >= 50) ? ((("viewers say you won, " + pct) + "-") + ((100 - pct))) : ((((("viewers give it to " + t.oppLast) + ", ") + ((100 - pct))) + "-") + pct)))) + "."));
+snd$1(Sfx.BELL);
+}
+static elect32(g, t) {
+let r = g.rng;
+let inc = (Govern.projection(t) + (r.nextGaussian() * 2.0));
+t.nat32 = inc;
+t.m32 = $arr(NS, 0);
+let ev = Govern.ev2030();
+t.ev32P = 0;
+t.ev32O = 0;
+let vp = 0, vt = 0;
+for (let s = 0; (s < NS); s++) {
+t.m32[s] = (Govern.stateMargin(t, s, inc) + (r.nextGaussian() * 2.0));
+if (Govern.mine(t, t.m32[s])) { t.ev32P += ev[s]; } else { t.ev32O += ev[s]; }
+let sh = (0.5 + ((((t.party === REP) ? -t.m32[s] : t.m32[s])) / 200.0));
+vp += (t.w28[s] * clamp(sh, 0.05, 0.95));
+vt += t.w28[s];
+}
+t.pop32P = ((vp / Math.max(1, vt)) * 100);
+let hP = ((0.8 * inc) + (r.nextGaussian() * 2));
+let hD = ((t.party === REP) ? -hP : hP);
+t.houseD32 = Govern.seatsD(hD, r);
+t.reelected = (t.ev32P >= 270);
+if ((t.ev32P === 269)) {
+t.reelected = ((t.party === DEM) ? (t.houseD32 >= 218) : ((t.party === REP) ? (t.houseD32 < 218) : false));
+Govern.log(t, (("A 269-269 tie. The House decides, and picks " + ((t.reelected ? t.presName : t.oppName))) + "."));
+}
+t.sen32 = $arr(NS, 0);
+t.sen32.fill(NaN);
+let dUp = 0, dWon = 0;
+for (const tok of $split(Govern.CLASS2, " ")) {
+let pp = $split(tok, ":");
+let s = stateIdx(pp[0]);
+let h26 = m26(s);
+let dHeld = ($eq(pp[1], "D") || (!Number.isNaN(h26) && (h26 > 5)));
+if (dHeld) { dUp++; }
+let m = (((Govern.lean28(t, s) + (Govern.natD(t, inc) * 0.9)) + ((dHeld ? 3 : -3))) + (r.nextGaussian() * 3.5));
+t.sen32[s] = m;
+if ((m > 0)) { dWon++; }
+}
+t.senateD32 = clampi(((t.senateD - dUp) + dWon), 0, 100);
+t.stage = Govern.ST_NIGHT;
+Govern.log(t, (t.reelected ? (((("Re-elected: " + t.ev32P) + " electoral votes to ") + t.ev32O) + ".") : (((((t.oppName + " wins the presidency, ") + t.ev32O) + " electoral votes to ") + t.ev32P) + ".")));
+}
+static aiPriorities(g, t) {
+let l = [];
+for (const b of t.bills) { if (((b.status === 0) || (b.status === 2))) { l.add(b); } }
+let tt = t;
+l.sort((a, b) => ($cmp(Govern.score$2(tt, b), Govern.score$2(tt, a))));
+let second = (t.q >= 8);
+for (let i = 0; (i < Math.min(3, l.length)); i++) {
+l[i].priority = true;
+l[i].second = second;
+}
+}
+static score$2(t, b) {
+let p = Govern.POL[b.id];
+let best = 0;
+for (let ap = 0; (ap < 4); ap++) { if (Govern.available(t, p, ap)) { best = Math.max(best, (Govern.whip(t, p, ap, false)[5] * (((ap === Govern.AP_DEAL) ? 0.6 : ((ap === Govern.AP_EXEC) ? 0.45 : 1))))); } }
+return ((best * ((p.support - 30))) * ((b.priority ? 1.4 : 1)));
+}
+static aiQuarter(g, t) {
+if (!t.voted) {
+let pick = null;
+let bap = 0;
+let bv = 0;
+for (const b of t.bills) {
+if ((((b.status === 1) || (b.status === 3)) || (b.tries >= 2))) { continue; }
+let p = Govern.POL[b.id];
+for (let ap = 0; (ap < 4); ap++) {
+if (!Govern.available(t, p, ap)) { continue; }
+let v = (((Govern.whip(t, p, ap, false)[5] * (((ap === Govern.AP_DEAL) ? 0.6 : ((ap === Govern.AP_EXEC) ? 0.45 : 1)))) * ((p.support - 30))) * ((b.priority ? 1.5 : 1)));
+if ((v > bv)) {
+bv = v;
+pick = b;
+bap = ap;
+}
+}
+}
+if (((pick != null) && (bv > 4))) { Govern.act(g, t, t.bills.indexOf(pick), bap, (t.capital > 1)); }
+}
+t.focus = (((t.q >= 8) && ((t.q % 2) === 1)) ? 3 : 1);
+let ev = Govern.pickEvent(g, t);
+if ((ev >= 0)) { Govern.applyEvent(g, t, ev, 0); }
+Govern.endQuarter(g, t);
+if ((t.stage === Govern.ST_MIDTERM)) {
+Govern.aiPriorities(g, t);
+t.stage = Govern.ST_DESK;
+}
+}
+static divided(t) {
+return ((Govern.ownH(t) < 218) || (Govern.ownS(t) < 50));
+}
+static pickEvent(g, t) {
+let r = g.rng;
+if (((t.q >= 14) || (r.nextDouble() > 0.65))) { return -1; }
+let c = [];
+for (let e = 0; (e < Govern.EV_TITLE.length); e++) {
+let once = (((e === 3) || (e === 11)) || (e === 12));
+if ((once && (((t.flags & ((1 << e)))) !== 0))) { continue; }
+if (((((e === 1) || (e === 11))) && !Govern.divided(t))) { continue; }
+if (((e === 7) && (t.gdp < 2.2))) { continue; }
+if (((e === 9) && (t.shock === 0))) { continue; }
+let exec = false;
+for (const b of t.bills) { if ((b.status === 3)) { exec = true; } }
+if (((e === 10) && !exec)) { continue; }
+if (((((t.flags & ((1 << e)))) !== 0) && (r.nextDouble() < 0.7))) { continue; }
+c.add(e);
+}
+if ((c.length === 0)) { return -1; }
+let e = c[r.nextInt(c.length)];
+t.flags |= (1 << e);
+return e;
+}
+static evBody(t, e) {
+switch (e) {
+case 0:
+return "A Category 4 storm has flattened towns from Louisiana to the Florida Panhandle. Governors want federal help, fast.";
+case 1:
+return "Congress hasn't passed the spending bills, and the other party wants concessions before it funds the government.";
+case 2:
+return "Chinese warships have surrounded Taiwan in what Beijing calls an exercise. Allies are watching what you do.";
+case 3:
+return (("A justice has announced their retirement. The Senate has " + Govern.ownS(t)) + " senators from your side.");
+case 4:
+return "A cabinet official is accused of steering contracts to a donor's company. The story is leading every newscast.";
+case 5:
+return "Three of the biggest employers in the country announce they will replace a fifth of their office staff with AI agents.";
+case 6:
+return "Fourteen people are dead after a shooting at a shopping center. The country is looking to you.";
+case 7:
+return "The economy added 380,000 jobs last month, the best report in years.";
+case 8:
+return "A pipeline attack in the Gulf has pushed oil past $110 a barrel. Gas prices are climbing.";
+case 9:
+return "The economy shrank last quarter, and economists say a recession has begun.";
+case 10:
+return "A federal judge has blocked one of your executive orders nationwide.";
+case 11:
+return "The Treasury will run out of room to borrow within weeks. The other party wants spending cuts in return for raising the limit.";
+case 12:
+return "A new respiratory virus is spreading in three cities. Hospitals are filling up.";
+default:
+return "Crossings at the southern border have doubled in two months, and border towns are overwhelmed.";
+}
+}
+static evOpts(t, e) {
+switch (e) {
+case 0:
+return ["Surge federal help now", "Let the states lead"];
+case 1:
+return ["Cut a deal", "Hold the line"];
+case 2:
+return ["Send carriers and rally allies", "Quiet diplomacy", "Stay out of it"];
+case 3:
+return ["Nominate a mainstream jurist", "A bold pick for the base"];
+case 4:
+return ["Fire the official today", "Stand by them", "Appoint an independent investigator"];
+case 5:
+return ["Retraining and wage insurance", "Let the market adjust"];
+case 6:
+return [((t.list === DEM) ? "Push for gun laws now" : "Push school safety and mental health"), "Comfort the families and wait"];
+case 7:
+return ["Take a victory lap"];
+case 8:
+return ["Release the strategic reserve", "Ride it out"];
+case 9:
+return ["Ask Congress for a stimulus", "Stay the course"];
+case 10:
+return ["Appeal to the Supreme Court", "Accept the ruling"];
+case 11:
+return ["Negotiate spending cuts", "Refuse to negotiate"];
+case 12:
+return ["Move fast: tests, vaccines, guidance", "Keep things open"];
+default:
+return ["An executive crackdown", "Ask Congress for money and judges"];
+}
+}
+static applyEvent(g, t, e, o) {
+let r = g.rng;
+let s;
+switch (e) {
+case 0:
+if ((o === 0)) {
+let bad = (r.nextDouble() < 0.2);
+t.approval += (bad ? -1.5 : 1.2);
+s = (bad ? "The federal response to the hurricane is slow and chaotic." : "FEMA's fast response to the hurricane wins praise.");
+} else {
+t.approval -= 1.5;
+s = "Governors blast the White House for leaving them on their own after the hurricane.";
+}
+break;
+case 1:
+if ((o === 0)) {
+t.approval += 0.3;
+t.enthusiasm -= 0.5;
+s = "A last-minute deal keeps the government open. Your base grumbles about the concessions.";
+} else { if ((r.nextDouble() < 0.55)) {
+t.approval += 1.5;
+t.enthusiasm += 0.5;
+s = "After a week-long shutdown, the other party caves.";
+} else {
+t.approval -= 2.0;
+s = "A three-week shutdown ends on the other party's terms, and voters blame the White House.";
+} }
+break;
+case 2:
+if ((o === 0)) {
+if ((r.nextDouble() < 0.15)) {
+t.approval -= 2;
+t.inflation += 0.3;
+s = "A naval collision near Taiwan rattles markets before both sides pull back.";
+} else {
+t.approval += 1.0;
+t.inflation += 0.2;
+s = "Beijing backs off after US carriers arrive. The country rallies behind the president.";
+}
+} else { if ((o === 1)) {
+t.approval += 0.3;
+s = "Quiet diplomacy calms the Taiwan Strait.";
+} else {
+t.approval -= 1.0;
+s = "Critics in both parties call the White House weak on China.";
+} }
+break;
+case 3:
+{
+let pc = ((o === 0) ? (((Govern.ownS(t) >= 50) ? 0.95 : 0.6)) : (((Govern.ownS(t) >= 50) ? 0.75 : 0.15)));
+if ((r.nextDouble() < pc)) {
+t.approval += 0.3;
+if ((o === 1)) { t.enthusiasm += 1; }
+s = "The Senate confirms your Supreme Court nominee.";
+} else {
+t.approval -= 1;
+s = "The Senate rejects your Supreme Court nominee.";
+}
+break;
+}
+case 4:
+if ((o === 0)) {
+t.approval -= 0.3;
+s = "You fire the official the same day. The story fades.";
+} else { if (((o === 1) && (r.nextDouble() < 0.5))) {
+t.approval -= 2.5;
+s = "New documents surface in the contracts scandal. Your defense of the official looks bad.";
+} else { if ((o === 1)) {
+s = "The contracts story fizzles.";
+} else {
+t.approval -= 0.8;
+s = "An independent investigator takes over the contracts case.";
+} } }
+break;
+case 5:
+if ((o === 0)) {
+t.unemp -= (((Govern.ownH(t) >= 218) && (Govern.ownS(t) >= 50)) ? 0.2 : 0.1);
+t.approval += 0.6;
+s = "A retraining and wage-insurance program for laid-off workers launches.";
+} else {
+t.approval -= 0.8;
+t.gdp += 0.2;
+s = "The White House says the AI transition will create more jobs than it destroys. Laid-off workers aren't convinced.";
+}
+break;
+case 6:
+if ((o === 0)) {
+t.approval += 0.3;
+t.enthusiasm += 0.5;
+s = "You call on Congress to act after the shooting.";
+} else {
+t.approval += 0.1;
+s = "You visit the families after the shooting.";
+}
+break;
+case 7:
+t.approval += 0.8;
+s = "A blowout jobs report lifts the president's numbers.";
+break;
+case 8:
+if ((o === 0)) {
+t.inflation -= 0.1;
+t.approval += 0.3;
+s = "Oil from the strategic reserve takes the edge off gas prices.";
+} else {
+t.inflation += 0.3;
+t.approval -= 0.5;
+s = "Gas tops $5 a gallon.";
+}
+break;
+case 9:
+if (((o === 0) && ((((Govern.ownH(t) >= 218) && (Govern.ownS(t) >= 50)) || (r.nextDouble() < 0.4))))) {
+t.gdp += 1;
+t.inflation += 0.3;
+t.shock *= 0.5;
+t.approval += 0.5;
+s = "Congress passes a stimulus package.";
+} else { if ((o === 0)) {
+t.approval -= 0.5;
+s = "Congress refuses the president's stimulus request.";
+} else {
+t.approval -= 1;
+s = "The White House says the economy will right itself.";
+} }
+break;
+case 10:
+{
+let eo = null;
+for (const b of t.bills) { if ((b.status === 3)) { eo = b; } }
+if ((eo == null)) {
+s = "The court fight goes nowhere.";
+break;
+}
+if (((o === 0) && (r.nextDouble() < 0.5))) { s = (("The Supreme Court lets your order on " + Govern.POL[eo.id].name.toLowerCase()) + " stand."); } else {
+eo.status = 4;
+s = (("Courts block your executive order on " + Govern.POL[eo.id].name.toLowerCase()) + ".");
+}
+break;
+}
+case 11:
+if ((o === 0)) {
+t.approval -= 0.2;
+t.gdp -= 0.1;
+t.enthusiasm -= 0.5;
+s = "A debt-ceiling deal trims spending.";
+} else { if ((r.nextDouble() < 0.6)) {
+t.approval += 1;
+s = "The other party blinks and raises the debt ceiling.";
+} else {
+t.gdp -= 0.8;
+t.approval -= 2;
+s = "Markets plunge as the government nears default before a deal is struck.";
+} }
+break;
+case 12:
+if ((o === 0)) {
+t.approval += 0.8;
+t.gdp -= 0.2;
+s = "A fast federal response contains the new virus.";
+} else { if ((r.nextDouble() < 0.5)) {
+t.approval += 0.3;
+s = "The virus fizzles out.";
+} else {
+t.approval -= 1.5;
+t.gdp -= 0.3;
+s = "The virus spreads to dozens of states.";
+} }
+break;
+default:
+if ((o === 0)) {
+t.approval += ((t.list === REP) ? 0.8 : 0.4);
+if ((t.list === DEM)) { t.enthusiasm -= 0.5; }
+s = "New executive limits on asylum claims slow the border surge.";
+} else {
+t.approval += 0.2;
+s = "You ask Congress for more border agents and immigration judges.";
+}
+}
+Govern.log(t, s);
+}
+static showEvent(u, g, t, e) {
+let o = Govern.evOpts(t, e);
+let a = $arr(o.length, null);
+for (let i = 0; (i < o.length); i++) {
+let k = i;
+a[i] = () => (Govern.applyEvent(g, t, e, k));
+}
+let m = new Modal();
+m.title = Govern.EV_TITLE[e];
+m.body = Govern.evBody(t, e);
+m.buttons = o;
+m.actions = a;
+m.col = C_AMBER;
+m.stacked = true;
+if ((u.modal == null)) { u.modal = m; } else { u.modalQueue.add(m); }
+snd$1(Sfx.OPEN);
+}
+static begin(u) {
+let g = u.game;
+if ((g.term == null)) { g.term = Govern.start(g, g.me()); }
+u.go(SC_GOVERN);
+snd$1(Sfx.STING);
+}
+static oneYearLater(u) {
+let g = u.game;
+if ((g.term == null)) { g.term = Govern.lossTerm(g); }
+u.go(SC_EPILOGUE);
+}
+static lossTerm(g) {
+{
+let me = g.me();
+let w = General.winnerParty(g);
+let k = ((w === DEM) ? g.nominee(DEM) : ((w === REP) ? g.nominee(REP) : g.indep()));
+let tot = Math.max(1, ((g.popD + g.popR) + g.popO));
+let pm = ((w === DEM) ? ((((g.popD - g.popR)) / tot) * 100) : ((w === REP) ? ((((g.popR - g.popD)) / tot) * 100) : 2));
+let m = $arr(NS, 0);
+for (let s = 0; (s < NS); s++) { m[s] = Vote.margin(g.result[s]); }
+let t = Govern.successor(g, w, ((k != null) ? k.name() : "The president"), ((k != null) ? k.last() : "the president"), null, ((g.houseSeatsD >= 0) ? g.houseSeatsD : Math.round(g.houseD)), General.senateSeats(g), g.unemp, g.inflation, g.gdp, pm, 0);
+let host = new Term();
+host.lost2028 = true;
+host.presName = ((me != null) ? me.name() : "");
+host.presLast = ((me != null) ? me.last() : "");
+host.presId = ((me != null) ? me.c.id : null);
+host.party = ((me != null) ? me.party : DEM);
+host.pm28 = ((me != null) ? Legacy.myMargin(g, me) : 0);
+host.next = t;
+host.stage = Govern.ST_DONE;
+Govern.epilogue(g, host);
+let watch = (g.set.role === ROLE_WATCH);
+if ((watch && !(host.epi.length === 0))) { host.epi.splice(0, 1)[0]; }
+if ((me != null)) {
+let night;
+if (watch) { night = ((((((k != null) ? k.name() : "The winner")) + " won the presidency with ") + (((w === DEM) ? g.evD : ((w === REP) ? g.evR : g.evI)))) + " electoral votes."); } else { if ((g.spectator || !me.nominee)) { night = (((("You didn't win the nomination; " + (((k != null) ? k.name() : "the other side"))) + " won the presidency with ") + (((w === DEM) ? g.evD : ((w === REP) ? g.evR : g.evI)))) + " electoral votes."); } else {
+night = (((("On Election Night you won " + Legacy.myEv(g, me)) + " electoral votes to ") + (((w === DEM) ? g.evD : ((w === REP) ? g.evR : g.evI)))) + (((host.pm28 > 0) ? ((", while winning the popular vote by " + fmt1(host.pm28)) + " points.") : ((", and lost the popular vote by " + fmt1(-host.pm28)) + " points."))));
+let close = [];
+for (let s = 0; (s < NS); s++) { if (((me.party === DEM) ? (m[s] < 0) : ((me.party === REP) ? (m[s] > 0) : true))) { close.add(s); } }
+let mm = m;
+close.sort((a, b) => ($cmp(Math.abs(mm[a]), Math.abs(mm[b]))));
+let c = new StringBuilder();
+for (let i = 0; (i < Math.min(3, close.length)); i++) { c.append(((i > 0) ? ", " : "")).append(STATES[close[i]].name).append(" (").append(margin(m[close[i]])).append(")"); }
+if (((me.party <= REP) && (c.length > 0))) { night += ((" The closest states you lost: " + c) + "."); }
+} }
+host.epi.splice((watch ? 0 : 1), 0, ["Election Night 2028", night]);
+}
+let mP = ((0.5 * ((t.approval - 50))) - 2.5);
+let nowP = ((t.list === DEM) ? t.houseD : (435 - t.houseD));
+let expP = Math.round(((t.list === DEM) ? (210 + (3.8 * mP)) : (435 - ((210 - (3.8 * mP))))));
+let mid = (((((((("With President " + t.presLast) + " at ") + Math.round(t.approval)) + "%, forecasters expect ") + Govern.plural(t.list)) + " to ") + (((expP < nowP) ? ("lose about " + ((nowP - expP))) : ("gain about " + ((expP - nowP)))))) + " House seats in the 2030 midterms.");
+let field = [];
+for (const c of ROSTER) { if (((((me != null) && (c.party === me.party)) && !c.custom) && !$eq(c.id, me.c.id))) { field.add(c); } }
+field.sort((a, b) => ($natcmp((((b.a[A_CHA] + b.a[A_DEB]) + b.a[A_SPE]) + b.a[A_EST]), (((a.a[A_CHA] + a.a[A_DEB]) + a.a[A_SPE]) + a.a[A_EST]))));
+if ((((me != null) && (me.party <= REP)) && (field.length >= 3))) { mid += ((((((((" The " + PARTY[me.party]) + " field for 2032 is already forming: ") + field[0].name()) + ", ") + field[1].name()) + " and ") + field[2].name()) + (((((host.pm28 > -3) && me.nominee) && !watch) ? ", and you lead the early polls." : "."))); }
+host.epi.add(["What comes next", mid]);
+return host;
+}
+}
+static finish(u, g, t) {
+Govern.wrapUp(g, t);
+u.go(SC_EPILOGUE);
+SaveGame.save(u, SaveGame.AUTO);
+}
+static wrapUp(g, t) {
+if (t.reelected) {
+t.next = Govern.successor(g, t.party, t.presName, t.presLast, t, t.houseD32, t.senateD32, t.unemp, t.inflation, t.gdp, ((t.pop32P * 2) - 100), 16);
+t.next.approval0 = t.approval;
+} else {
+t.next = Govern.successor(g, t.oppParty, t.oppName, t.oppLast, null, t.houseD32, t.senateD32, t.unemp, t.inflation, t.gdp, (100 - (t.pop32P * 2)), 16);
+}
+t.stage = Govern.ST_DONE;
+Govern.epilogue(g, t);
+}
+static score$1(t) {
+let s = 600;
+for (const b of t.bills) { if (((b.status === 1) || (b.status === 3))) { s += (b.priority ? 140 : 60); } }
+if (t.reelected) { s += (600 + (2 * Math.max(0, (t.ev32P - 270)))); }
+s += Math.round((10 * ((t.approval - 45))));
+if (((t.houseD30 >= 0) && (((t.list === DEM) ? (t.houseD30 >= 218) : ((435 - t.houseD30) >= 218))))) { s += 150; }
+return Math.max(100, s);
+}
+static rank(t) {
+return clampi((46 - $idiv(((Govern.score$1(t) - 400)), 55)), 3, 45);
+}
+static ordinal(n) {
+let m = (n % 100);
+return (n + ((((m >= 11) && (m <= 13)) ? "th" : (((n % 10) === 1) ? "st" : (((n % 10) === 2) ? "nd" : (((n % 10) === 3) ? "rd" : "th"))))));
+}
+static lawList(t) {
+let b = new StringBuilder();
+for (const x of t.bills) { if (((x.status === 1) || (x.status === 3))) {
+let p = Govern.POL[x.id];
+b.append(p.name).append(((x.status === 3) ? " (executive order)" : ((x.strength < 1) ? " (compromise)" : ""))).append(": ").append(Govern.impact(p, x.strength)).append("\n");
+} }
+for (const x of t.bills) { if ((x.status === 4)) { b.append(Govern.POL[x.id].name).append(": blocked by the courts.\n"); } }
+return ((b.length === 0) ? "No major laws.\n" : b.toString());
+}
+static fate(c, pm, r) {
+let role = (((c != null) && (c.role != null)) ? c.role.toLowerCase() : "");
+let base = (role.includes("vice president") ? "is back in private life after four years as vice president" : ((role.includes("governor") && !role.includes("former")) ? "is back at work in the governor's office" : ((role.includes("senator") && !role.includes("former")) ? "is back in the Senate" : ((role.includes("representative") || role.includes("congress")) ? "is back in the House" : "is writing a memoir about the campaign"))));
+return (base + (((pm > -3) ? ", and pundits already talk about a comeback." : ".")));
+}
+static epilogue(g, t) {
+t.epi.clear();
+let n = t.next;
+let r = g.rng;
+if (t.lost2028) {
+t.epi.add(["You", ((t.presName + " ") + Govern.fate(candById(t.presId), t.pm28, r))]);
+if ((n != null)) {
+t.epi.add([(("President " + n.presLast) + "'s first year"), (((((((n.presName + " took office on January 20, 2029, with ") + Math.round(n.approval0)) + "% approval. A year later it is ") + Math.round(n.approval)) + "%. ") + ((n.filibusterGone ? "The Senate has ended the filibuster. " : ""))) + "Laws passed:")]);
+t.epi.add(["", Govern.lawList(n)]);
+t.epi.add(["The country", (((((((((("Unemployment " + fmt1(n.unemp0)) + "% to ") + fmt1(n.unemp)) + "%. Inflation ") + fmt1(n.inflation0)) + "% to ") + fmt1(n.inflation)) + "%. Growth ") + fmt1(n.gdp)) + "%.")]);
+}
+return;
+}
+let head;
+if (t.reelected) { head = ((((((("President " + t.presLast) + " is ten months into a second term") + (((n != null) ? ((", with approval at " + Math.round(n.approval)) + "%.") : "."))) + " Re-elected with ") + t.ev32P) + " electoral votes") + (((t.pop32P >= 50) ? ((" and " + fmt1(t.pop32P)) + "% of the vote.") : "."))); } else { head = (((((((((t.presName + " left the White House on January 20, 2033, after losing to ") + t.oppName) + ", ") + t.ev32O) + " electoral votes to ") + t.ev32P) + ". ") + t.presLast) + " is writing a memoir and raising money for a presidential library."); }
+t.epi.add(["Where you are now", head]);
+t.epi.add(["Your record", Govern.lawList(t)]);
+let ec = (((((((((("Unemployment went from " + fmt1(t.unemp0)) + "% to ") + fmt1(t.unemp)) + "%, inflation from ") + fmt1(t.inflation0)) + "% to ") + fmt1(t.inflation)) + "%, and growth ended at ") + fmt1(t.gdp)) + "%.");
+t.epi.add(["The economy", ec]);
+let cong = (((((((((((("Democrats held " + t.houseD0) + " House seats after 2028, ") + t.houseD30) + " after 2030 and ") + t.houseD32) + " after 2032; ") + t.senateD0) + ", ") + t.senateD30) + " and ") + t.senateD32) + " senators.");
+t.epi.add(["Congress", (cong + ((t.filibusterGone ? " The filibuster is gone." : "")))]);
+if (((n != null) && !t.reelected)) {
+t.epi.add([(("President " + n.presLast) + "'s first year"), ((("Approval " + Math.round(n.approval)) + "%. ") + (((Govern.lawsSince(n, 16) === 0) ? "No major laws yet." : (("New laws: " + Govern.names$2(n, 16)) + "."))))]);
+} else { if (((n != null) && (Govern.lawsSince(n, 16) > 0))) {
+t.epi.add(["The second term so far", (("New laws: " + Govern.names$2(n, 16)) + ".")]);
+} }
+t.epi.add(["History's first draft", (((("Historians' early verdict ranks the " + t.presLast) + " presidency ") + Govern.ordinal(Govern.rank(t))) + " of 47.")]);
+}
+static lawsSince(t, q) {
+let n = 0;
+for (const b of t.bills) { if (((((b.status === 1) || (b.status === 3))) && (b.quarter >= q))) { n++; } }
+return n;
+}
+static names$1(t) {
+return Govern.names$2(t, -1);
+}
+static names$2(t, since) {
+let b = new StringBuilder();
+for (const x of t.bills) { if (((((x.status === 1) || (x.status === 3))) && (x.quarter >= since))) { b.append(((b.length > 0) ? ", " : "")).append(Govern.POL[x.id].name); } }
+return b.toString();
+}
+static earned(g, l) {
+let t = g.term;
+if (((t == null) || t.lost2028)) { return; }
+if (t.reelected) { l.add("reelected"); }
+let pp = 0;
+for (const b of t.bills) { if (((b.priority && !b.second) && (((b.status === 1) || (b.status === 3))))) { pp++; } }
+if ((pp >= 3)) { l.add("lawmaker"); }
+if (((((t.houseD30 >= 0) && (t.party === t.list)) && ((((t.list === DEM) ? t.houseD30 : (435 - t.houseD30))) >= 218)) && ((((t.list === DEM) ? t.houseD0 : (435 - t.houseD0))) >= 218))) { l.add("midterm"); }
+if (((t.stage === Govern.ST_DONE) && (t.approval >= 55))) { l.add("beloved"); }
+}
+static record(g, t) {
+if ((t.recorded || t.lost2028)) { return; }
+t.recorded = true;
+let a = Legacy.earned(g);
+let ids = new StringBuilder();
+for (const x of a) { ids.append(((ids.length > 0) ? "," : "")).append(x); }
+let line = ((((((((((((((("Nov 2, 2032|" + $replace(t.presName, "|", "/")) + "|") + $replace(PARTY[t.party], "|", "/")) + "|") + SCEN_NAME[g.set.scenario]) + "|") + ["Normal", "Easy", "Normal", "Hard"][(g.set.difficulty + 1)]) + "|") + ((t.reelected ? "Two-term president" : "One-term president"))) + "|") + ((Legacy.score(g) + Govern.score$1(t)))) + "|") + t.ev32P) + "|") + ids);
+Legacy.writeAll(((Legacy.readAll() + line) + "\n"));
+}
+static draw(u, g) {
+let game = u.game;
+let t = game.term;
+if ((t == null)) {
+u.go(SC_HOME);
+return;
+}
+if (((t.stage === Govern.ST_AGENDA) || (t.stage === Govern.ST_AGENDA2))) {
+Govern.agenda(u, g, game, t);
+return;
+}
+if ((t.stage === Govern.ST_MIDTERM)) {
+Govern.midtermScreen(u, g, game, t);
+return;
+}
+if (((t.stage === Govern.ST_CAMP1) || (t.stage === Govern.ST_CAMP2))) {
+Govern.campaign(u, g, game, t);
+return;
+}
+if ((t.stage === Govern.ST_NIGHT)) {
+Govern.night(u, g, game, t);
+return;
+}
+if ((t.stage === Govern.ST_DONE)) {
+u.go(SC_EPILOGUE);
+return;
+}
+Govern.desk(u, g, game, t);
+}
+static stat(g, x, y, w, lab, val, sub, c) {
+g.setColor(new Color(255, 255, 255, 10));
+g.fill(new RoundRectangle2D.Double(x, y, w, 70, 10, 10));
+label(g, lab, (x + 12), (y + 18), C_DIM);
+text(g, val, (x + 12), (y + 48), F_H2, c);
+if ((sub != null)) { textR(g, sub, ((x + w) - 10), (y + 48), F_XS, C_DIM); }
+}
+static seats(d, total) {
+return (((d + " D - ") + ((total - d))) + " R");
+}
+static statsRow(g, t, y) {
+let w = ((((DW - 96) - (7 * 10))) / 8.0), x = 48;
+Govern.stat(g, x, y, w, "Approval", (Math.round(t.approval) + "%"), ((t.nHist > 1) ? (((t.approval >= t.appHist[Math.max(0, (t.nHist - 2))]) ? "up" : "down")) : null), ((t.approval >= 50) ? C_GOOD : ((t.approval >= 43) ? Color.white : C_BAD)));
+x += (w + 10);
+Govern.stat(g, x, y, w, "Right track", (Math.round(Custom.rightTrack$4(t.approval, t.unemp, t.inflation, t.gdp)) + "%"), null, Color.white);
+x += (w + 10);
+Govern.stat(g, x, y, w, "Unemployment", (fmt1(t.unemp) + "%"), null, ((t.unemp <= 4.5) ? C_GOOD : ((t.unemp >= 6) ? C_BAD : Color.white)));
+x += (w + 10);
+Govern.stat(g, x, y, w, "Inflation", (fmt1(t.inflation) + "%"), null, ((t.inflation <= 2.8) ? C_GOOD : ((t.inflation >= 4) ? C_BAD : Color.white)));
+x += (w + 10);
+Govern.stat(g, x, y, w, "Growth", (fmt1(t.gdp) + "%"), null, ((t.gdp >= 2) ? C_GOOD : ((t.gdp < 0) ? C_BAD : Color.white)));
+x += (w + 10);
+Govern.stat(g, x, y, w, "House", Govern.seats(t.houseD, 435), null, ((t.houseD >= 218) ? C_DEM_L : C_REP_L));
+x += (w + 10);
+Govern.stat(g, x, y, w, "Senate", Govern.seats(t.senateD, 100), (t.filibusterGone ? "no filibuster" : null), ((t.senateD >= 51) ? C_DEM_L : ((t.senateD === 50) ? Color.white : C_REP_L)));
+x += (w + 10);
+Govern.stat(g, x, y, w, "Political capital", (t.capital + " of 3"), null, C_GOLD);
+}
+static chart$10(g, x, y, w, h, v, n, lo, hi, c) {
+Govern.chart$11(g, x, y, w, h, v, n, lo, hi, c, 16);
+}
+static chart$11(g, x, y, w, h, v, n, lo, hi, c, span) {
+g.setColor(new Color(255, 255, 255, 18));
+for (let k = 0; (k <= 4); k++) {
+let yy = (y + ((h * k) / 4.0));
+g.draw(new Line2D.Double(x, yy, (x + w), yy));
+textR(g, String(Math.round((hi - ((((hi - lo)) * k) / 4.0)))), (x - 6), (yy + 4), F_T, C_DIM);
+}
+g.setColor(new Color(255, 255, 255, 60));
+let y50 = (y + ((h * ((hi - 50))) / ((hi - lo))));
+g.draw(new Line2D.Double(x, y50, (x + w), y50));
+if ((n < 2)) { return; }
+g.setColor(c);
+g.setStroke(new BasicStroke(2.5));
+for (let i = 1; (i < n); i++) {
+let x0 = (x + ((w * ((i - 1))) / span)), x1 = (x + ((w * i) / span));
+let y0 = (y + ((h * ((hi - clamp(v[(i - 1)], lo, hi)))) / ((hi - lo)))), y1 = (y + ((h * ((hi - clamp(v[i], lo, hi)))) / ((hi - lo))));
+g.draw(new Line2D.Double(x0, y0, x1, y1));
+}
+g.setStroke(new BasicStroke(1));
+}
+static agenda(u, g, game, t) {
+let second = (t.stage === Govern.ST_AGENDA2);
+Screens.header(u, g, (second ? "New Priorities for 2031-32" : "Inauguration Day"), (second ? "After the midterms. Choose up to three priorities for the second half of your term." : (("January 20, 2029. " + t.presName) + " takes the oath. Choose up to three priorities for your first two years.")));
+let n = Govern.priorities(t, second);
+for (let i = 0; (i < t.bills.length); i++) {
+let b = t.bills[i];
+let p = Govern.POL[b.id];
+let x = (48 + (((i % 2)) * 508)), y = (124 + (($idiv(i, 2)) * 98)), w = 500, h = 90;
+let done = ((b.status === 1) || (b.status === 3));
+let sel = (b.priority && (b.second === second));
+let bb = b;
+u.card(g, x, y, w, h, sel, (done ? null : () => {
+if ((bb.priority && (bb.second === second))) { bb.priority = false; } else { if ((Govern.priorities(t, second) < 3)) {
+if ((bb.priority && !second)) { return; }
+bb.priority = true;
+bb.second = second;
+} }
+}), (done ? "Already law." : (sel ? "A priority. Click to drop it." : "Make this a priority.")));
+text(g, p.name, (x + 16), (y + 26), F_BB, (done ? C_DIM : (sel ? C_GOLD : Color.white)));
+textR(g, (done ? (((b.status === 3) ? "Executive order" : "Law")) : (("Support " + Math.round(p.support)) + "%")), ((x + w) - 14), (y + 26), F_XSB, (done ? C_GOOD : ((p.support >= 55) ? C_GOOD : ((p.support < 48) ? C_BAD : C_TEXT))));
+wrap(g, p.desc, (x + 16), (y + 46), (w - 32), F_XS, C_TEXT);
+let vehicle = (p.recon ? "Can pass by reconciliation (a simple majority)" : (t.filibusterGone ? "Needs a simple majority" : "Needs 60 votes in the Senate"));
+text(g, (vehicle + ((p.exec ? "  |  Executive action possible" : ""))), (x + 16), (y + 80), F_T, C_DIM);
+}
+let px = 1072, pw = ((DW - 48) - px);
+u.panel(g, px, 124, pw, 690, "Congress");
+text(g, "House", (px + 20), 172, F_H3, C_TEXT);
+textR(g, Govern.seats(t.houseD, 435), ((px + pw) - 20), 172, F_BB, ((t.houseD >= 218) ? C_DEM_L : C_REP_L));
+text(g, "Senate", (px + 20), 204, F_H3, C_TEXT);
+textR(g, Govern.seats(t.senateD, 100), ((px + pw) - 20), 204, F_BB, ((t.senateD >= 51) ? C_DEM_L : ((t.senateD === 50) ? Color.white : C_REP_L)));
+let h = (Govern.ownH(t) >= 218), s = (Govern.ownS(t) >= 50);
+let ctl = ((t.party !== t.list) ? "No party of your own in Congress: every bill needs a coalition." : ((h && s) ? "Your party controls both chambers: a trifecta." : (h ? "Your party has the House; the other party runs the Senate." : (s ? "Your party has the Senate; the other party runs the House." : "The other party controls both chambers."))));
+let y = (236 + wrap(g, ctl, (px + 20), 236, (pw - 40), F_S, Color.white));
+y += (12 + wrap(g, (((t.filibusterGone ? "The filibuster is gone: bills need a simple majority." : "Most bills need 60 votes to beat a filibuster. Budget bills can go through reconciliation with a simple majority, once a year.")) + " Bipartisan deals win votes from the other side but water bills down. Some things can be done by executive order, though the courts may block them."), (px + 20), (y + 12), (pw - 40), F_XS, C_DIM));
+label(g, (("Your priorities (" + n) + " of 3)"), (px + 20), (y + 40), C_GOLD);
+y += 60;
+for (const b of t.bills) { if ((b.priority && (b.second === second))) {
+text(g, Govern.POL[b.id].name, (px + 20), y, F_S, Color.white);
+y += 22;
+} }
+if (second) {
+label(g, "Already law", (px + 20), (y + 16), C_DIM);
+y += 36;
+for (const b of t.bills) { if (((b.status === 1) || (b.status === 3))) {
+text(g, Govern.POL[b.id].name, (px + 20), y, F_XS, C_TEXT);
+y += 18;
+} }
+}
+u.button$9(g, ((DW - 48) - 300), 832, 300, 44, (second ? "Back to work" : "Take the oath"), B_GOLD, () => {
+t.stage = Govern.ST_DESK;
+snd$1(Sfx.CHIME);
+}, "Priorities get your full attention: passing them matters most to your score and your legacy.");
+u.button$8(g, 48, 832, 220, 44, "Main menu", B_GHOST, () => {
+SaveGame.save(u, SaveGame.AUTO);
+u.go(SC_HOME);
+});
+}
+static desk(u, g, game, t) {
+let toMid = (7 - t.q);
+let sub = ((Govern.when(t.q) + "  |  ") + (((toMid > 0) ? (("Midterms in " + ((toMid + 1))) + " quarters") : ((toMid === 0) ? "The midterms are this fall" : ((t.q < 12) ? (("Re-election in " + ((15 - t.q))) + " quarters") : "An election year")))));
+Screens.header(u, g, (("The " + t.presLast) + " White House"), sub);
+Govern.statsRow(g, t, 118);
+u.panel(g, 48, 202, 500, 612, "Your agenda");
+let y = 236;
+for (let i = 0; (i < t.bills.length); i++) {
+let b = t.bills[i];
+let p = Govern.POL[b.id];
+let k = i;
+let done = ((b.status === 1) || (b.status === 3));
+u.card(g, 60, y, 476, 34, (t.pick === i), ((done || t.voted) ? null : () => {
+t.pick = k;
+if (!Govern.available(t, p, t.approach)) { t.approach = Govern.AP_LINE; }
+}), p.desc);
+if (b.priority) {
+g.setColor(C_GOLD);
+g.fill(new Ellipse2D.Double(70, (y + 13), 8, 8));
+}
+text(g, p.name, 86, (y + 22), F_S, (done ? C_DIM : Color.white));
+let st = ((b.status === 1) ? (((b.strength < 1) ? "Law (deal)" : "Law")) : ((b.status === 2) ? "Failed" : ((b.status === 3) ? "Executive order" : ((b.status === 4) ? "Blocked" : ""))));
+textR(g, st, 524, (y + 22), F_XSB, (((b.status === 1) || (b.status === 3)) ? C_GOOD : (((b.status === 2) || (b.status === 4)) ? C_BAD : C_DIM)));
+y += 38;
+}
+if (((!t.filibusterGone && (Govern.ownS(t) >= 50)) && (t.party === t.list))) {
+u.card(g, 60, y, 476, 34, (t.pick === Govern.PICK_FILIBUSTER), (t.voted ? null : () => (t.pick = Govern.PICK_FILIBUSTER)), "Change the Senate's rules so bills need only a majority. Needs 50 of your own senators.");
+text(g, "Rules: end the filibuster", 86, (y + 22), F_S, C_AMBER);
+}
+let mx = 564, mw = 500;
+u.panel(g, mx, 202, mw, 612, "This quarter's fight");
+if (t.voted) {
+wrap(g, ("You've had this quarter's fight in Congress. " + (((t.log.length === 0) ? "" : t.log[(t.log.length - 1)]))), (mx + 20), 250, (mw - 40), F_S, C_TEXT);
+} else { if ((t.pick === Govern.PICK_FILIBUSTER)) {
+text(g, "End the filibuster", (mx + 20), 256, F_H3, Color.white);
+wrap(g, "A simple-majority rules change. Some of your own senators may balk, and voters who like checks and balances won't love it. Your base will.", (mx + 20), 282, (mw - 40), F_XS, C_TEXT);
+text(g, (("Chance of success: " + Math.round((100 * Govern.filibusterOdds(t)))) + "%"), (mx + 20), 350, F_BB, C_GOLD);
+u.button$8(g, (mx + 20), 380, (mw - 40), 40, "Call the vote", B_PRIMARY, () => {
+Govern.act(game, t, Govern.PICK_FILIBUSTER, 0, false);
+Govern.voteResult(u, t);
+});
+} else { if ((t.pick < 0)) {
+wrap(g, "Pick a bill from your agenda. You get one big fight in Congress each quarter. Priorities are marked with a gold dot.", (mx + 20), 250, (mw - 40), F_S, C_TEXT);
+} else {
+let b = t.bills[t.pick];
+let p = Govern.POL[b.id];
+text(g, p.name, (mx + 20), 256, F_H3, Color.white);
+let yy = (266 + wrap(g, p.desc, (mx + 20), 276, (mw - 40), F_XS, C_TEXT));
+text(g, (("Public support " + Math.round(p.support)) + "%"), (mx + 20), (yy + 26), F_XSB, ((p.support >= 55) ? C_GOOD : ((p.support < 48) ? C_BAD : C_TEXT)));
+label(g, "How you push it", (mx + 20), (yy + 56), C_DIM);
+u.segmented(g, (mx + 20), (yy + 64), (mw - 40), 32, Govern.APPROACH, t.approach, (i) => (t.approach = i), ["Your party's bill, all of it. Needs 60 senators unless the filibuster is gone.", "Water it down for votes from the other side: about 60% of the effect.", (p.recon ? ((Govern.reconOk(t, p) ? "A budget bill with a simple majority in the Senate. Once a year." : "You've used this year's reconciliation bill.")) : "Not a budget bill: it can't go through reconciliation."), (p.exec ? "No vote needed, but weaker, and the courts may block it." : "This needs Congress: there's no executive-order version.")]);
+let ok = Govern.available(t, p, t.approach);
+yy += 112;
+if (!ok) {
+wrap(g, ((t.approach === Govern.AP_RECON) ? ((p.recon ? "You've used this year's reconciliation bill." : "This isn't a budget bill, so it can't go through reconciliation.")) : "There is no executive-order version of this."), (mx + 20), yy, (mw - 40), F_S, C_BAD);
+} else { if ((t.approach === Govern.AP_EXEC)) {
+wrap(g, "Sign it as an executive order. About 45% of the effect, and the courts may block it.", (mx + 20), yy, (mw - 40), F_S, C_TEXT);
+} else {
+u.toggle(g, (mx + 20), (yy - 14), t.goPublic, () => {
+if (((t.capital > 0) || t.goPublic)) { t.goPublic = !t.goPublic; }
+}, "Rallies, interviews and calls to wavering members. Costs 1 political capital.");
+text(g, "Go to the country (1 capital)", (mx + 66), (yy + 2), F_S, (t.goPublic ? Color.white : C_DIM));
+let w = Govern.whip(t, p, t.approach, (t.goPublic && (t.capital > 0)));
+yy += 34;
+text(g, "House", (mx + 20), (yy + 12), F_XSB, C_TEXT);
+bar(g, (mx + 90), (yy + 2), (mw - 190), 12, (w[0] / 435), C_ACCENT);
+g.setColor(Color.white);
+g.fill(new Rectangle2D.Double(((mx + 90) + ((((mw - 190)) * 218) / 435.0)), (yy - 2), 2, 20));
+textR(g, (Math.round(w[0]) + " of 218"), ((mx + mw) - 20), (yy + 12), F_XS, C_TEXT);
+yy += 30;
+text(g, "Senate", (mx + 20), (yy + 12), F_XSB, C_TEXT);
+bar(g, (mx + 90), (yy + 2), (mw - 190), 12, (w[2] / 100), C_ACCENT);
+g.setColor(Color.white);
+g.fill(new Rectangle2D.Double(((mx + 90) + ((((mw - 190)) * w[4]) / 100.0)), (yy - 2), 2, 20));
+textR(g, ((Math.round(w[2]) + " of ") + $i(w[4])), ((mx + mw) - 20), (yy + 12), F_XS, C_TEXT);
+yy += 34;
+text(g, ((w[6] > 0) ? (((w[6] === 1) ? "The Speaker won't bring it to the floor." : "The majority leader won't bring it up.")) : (("Chance of passing: " + Math.round((100 * w[5]))) + "%")), (mx + 20), (yy + 10), F_BB, ((w[5] >= 0.6) ? C_GOOD : ((w[5] >= 0.3) ? C_GOLD : C_BAD)));
+} }
+u.button$8(g, (mx + 20), 616, (mw - 40), 40, ((t.approach === Govern.AP_EXEC) ? "Sign the executive order" : "Bring it to a vote"), (ok ? B_PRIMARY : B_OFF), (ok ? () => {
+Govern.act(game, t, t.pick, t.approach, t.goPublic);
+Govern.voteResult(u, t);
+} : null));
+} } }
+label(g, "How you spend your time", (mx + 20), 690, C_DIM);
+u.segmented(g, (mx + 20), 700, (mw - 40), 32, Govern.FOCUS, t.focus, (i) => (t.focus = i), ["Jobs, prices and growth: helps most when the economy is hurting.", "Rallies and town halls: a little approval every quarter.", "Summits and diplomacy: steadier in a crisis.", ("Raise money and recruit candidates for the midterms" + (((t.q >= 8) ? " and build your re-election war chest." : ".")))]);
+let fd = ["Jobs, prices and growth.", "Rallies and town halls around the country.", "Summits and diplomacy.", ((t.q >= 8) ? "Fundraising for your party and your re-election." : "Fundraising and recruiting for the midterms.")];
+text(g, fd[t.focus], (mx + 20), 756, F_XS, C_TEXT);
+let rx = 1080, rw = ((DW - 48) - rx);
+u.panel(g, rx, 202, rw, 612, "Approval");
+Govern.chart$10(g, (rx + 46), 240, (rw - 66), 150, t.appHist, t.nHist, 30, 70, C_GOLD);
+label(g, "News", (rx + 20), 428, C_DIM);
+let ny = 448;
+for (let i = (t.log.length - 1); ((i >= 0) && (ny < 790)); i--) { ny += (6 + wrap(g, t.log[i], (rx + 20), ny, (rw - 40), F_XS, ((i === (t.log.length - 1)) ? Color.white : C_DIM))); }
+u.button$8(g, 48, 832, 220, 44, "Main menu", B_GHOST, () => {
+SaveGame.save(u, SaveGame.AUTO);
+u.go(SC_HOME);
+});
+u.button$8(g, ((DW - 48) - 300), 832, 300, 44, ((t.q === 7) ? "On to the midterms" : ((t.q === 13) ? "On to the campaign" : "End the quarter")), B_GOLD, () => (Govern.nextQuarter(u, game, t)));
+}
+static voteResult(u, t) {
+u.toast(t.log[(t.log.length - 1)], C_GOLD);
+t.pick = -1;
+}
+static nextQuarter(u, game, t) {
+Govern.endQuarter(game, t);
+if ((t.stage === Govern.ST_DESK)) {
+let e = Govern.pickEvent(game, t);
+if ((e >= 0)) { Govern.showEvent(u, game, t, e); }
+}
+if ((t.stage === Govern.ST_MIDTERM)) { snd$1(Sfx.BELL); } else { snd$3(Sfx.CHIME, 0.4, 1); }
+SaveGame.save(u, SaveGame.AUTO);
+}
+static senateMap(u, g, game, m, x, y, w, h) {
+let f = USMap.fit(x, y, w, h);
+for (let s = 0; (s < NS); s++) { USMap.cur[s] = (((m == null) || Number.isNaN(m[s])) ? new Color(0x1c, 0x25, 0x3a) : marginColor(m[s], 1)); }
+Night.fitDraw(u, g, f);
+}
+static midtermScreen(u, g, game, t) {
+Screens.header(u, g, "The 2030 Midterms", ("November 5, 2030. " + (((t.party === t.list) ? (((((t.midMargin >= 0) ? "Your party wins the national House vote by " : "Your party loses the national House vote by ")) + fmt1(Math.abs(t.midMargin))) + " points.") : "The verdict on the parties."))));
+u.panel(g, 48, 124, 520, 690, "Results");
+let hB = t.houseD0, sB = t.senateD0;
+text(g, "House", 68, 180, F_H3, C_TEXT);
+text(g, Govern.seats(t.houseD30, 435), 68, 220, F_H2, ((t.houseD30 >= 218) ? C_DEM_L : C_REP_L));
+text(g, (("Democrats " + ((((t.houseD30 - hB) >= 0) ? "+" : ""))) + ((t.houseD30 - hB))), 68, 246, F_XS, C_DIM);
+text(g, "Senate", 300, 180, F_H3, C_TEXT);
+text(g, Govern.seats(t.senateD30, 100), 300, 220, F_H2, ((t.senateD30 >= 51) ? C_DEM_L : ((t.senateD30 === 50) ? Color.white : C_REP_L)));
+text(g, (("Democrats " + ((((t.senateD30 - sB) >= 0) ? "+" : ""))) + ((t.senateD30 - sB))), 300, 246, F_XS, C_DIM);
+let h = (Govern.ownH(t) >= 218), s = (Govern.ownS(t) >= 50);
+let what = ((t.party !== t.list) ? "You still have no party in Congress. Every bill needs a coalition." : ((h && s) ? "You keep both chambers. The second half of your term can be as ambitious as the first." : ((!h && !s) ? "Your party has lost both chambers. Your bills will need the other side's votes, or executive action." : (!h ? "You've lost the House. Bills now need the other party's votes there." : "You've lost the Senate. Your nominees and bills need the other party."))));
+let yy = (290 + wrap(g, what, 68, 290, 480, F_S, Color.white));
+label(g, "Senate seats that changed hands", 68, (yy + 30), C_GOLD);
+yy += 52;
+for (const tok of $split(Govern.CLASS1, " ")) {
+let p = $split(tok, ":");
+let st = stateIdx(p[0]);
+let dHeld = $eq(p[1], "D"), dWon = (t.sen30[st] > 0);
+if ((dHeld !== dWon)) {
+text(g, (((((STATES[st].name + ": ") + ((dWon ? "Democratic gain" : "Republican gain"))) + " (") + margin(t.sen30[st])) + ")"), 68, yy, F_XS, (dWon ? C_DEM_L : C_REP_L));
+yy += 20;
+}
+}
+let px = 584, pw = ((DW - 48) - px);
+u.panel(g, px, 124, pw, 690, "The Senate races");
+Govern.senateMap(u, g, game, t.sen30, (px + 10), 170, (pw - 20), 600);
+u.button$8(g, ((DW - 48) - 340), 832, 340, 44, "Set your priorities for 2031-32", B_GOLD, () => {
+for (const b of t.bills) { if ((b.status === 2)) { b.tries = 0; } }
+t.stage = Govern.ST_AGENDA2;
+});
+}
+static campaign(u, g, game, t) {
+let fall = (t.stage === Govern.ST_CAMP2);
+let o = Govern.opp(t);
+Screens.header(u, g, (fall ? "The Fall Campaign" : "The 2032 Campaign"), (fall ? "September 2032. Three debates, then your closing argument." : (((("Summer 2032. " + t.oppName) + " is the ") + PARTY[t.oppParty]) + " nominee. Set the shape of your campaign.")));
+u.panel(g, 48, 124, 400, 690, "The challenger");
+if ((o != null)) {
+Portrait.draw(g, o, 68, 160, 150, 180, u.tsec, 0, false, true);
+text(g, o.name(), 236, 190, F_H3, Color.white);
+wrap(g, ((o.role != null) ? o.role : ""), 236, 212, 196, F_XS, C_DIM);
+let ks = [A_CHA, A_DEB, A_SPE, A_EST];
+let kn = ["Charisma", "Debating", "Speeches", "Establishment"];
+for (let i = 0; (i < 4); i++) {
+text(g, kn[i], 68, (380 + (i * 30)), F_XS, C_TEXT);
+bar(g, 190, (371 + (i * 30)), 180, 10, (o.a[ks[i]] / 100.0), partyColor(t.oppParty));
+textR(g, String(o.a[ks[i]]), 428, (380 + (i * 30)), F_XSB, Color.white);
+}
+}
+label(g, "Your record", 68, 520, C_GOLD);
+let rows = [["Approval", (Math.round(t.approval) + "%")], ["Laws passed", String(Govern.laws(t))], ["Unemployment", (fmt1(t.unemp) + "%")], ["Inflation", (fmt1(t.inflation) + "%")], ["War chest", (Math.round((Math.min(4, t.warChest) * 25)) + "% of a full one")]];
+for (let i = 0; (i < rows.length); i++) {
+text(g, rows[i][0], 68, (548 + (i * 26)), F_S, C_TEXT);
+textR(g, rows[i][1], 428, (548 + (i * 26)), F_BB, Color.white);
+}
+if ((t.challenger != null)) { wrap(g, (("Primary challenge from " + t.challenger) + ": some of your party is still sore."), 68, 690, 360, F_XS, C_AMBER); }
+let mx = 464, mw = 600;
+u.panel(g, mx, 124, mw, 690, (fall ? "The debates" : "Your campaign"));
+if (!fall) {
+label(g, "Your message", (mx + 20), 166, C_DIM);
+u.segmented(g, (mx + 20), 176, (mw - 40), 32, Govern.THEME, t.theme, (i) => (t.theme = i), ["Four years of results: works when voters like the results.", "Make it about the other side's plans.", "A fresh agenda: helps when the first term is a hard sell."]);
+let td = ["Run on your record: it plays well if approval is near 50%, badly if it's low.", "Make the race a choice, not a referendum: a steady gain whatever your numbers.", "A new agenda for the next four years: the best bet when your approval is weak."];
+wrap(g, td[t.theme], (mx + 20), 230, (mw - 40), F_XS, C_TEXT);
+label(g, "Where the money goes", (mx + 20), 280, C_DIM);
+u.segmented(g, (mx + 20), 290, (mw - 40), 32, Govern.BUDGET, t.budget, (i) => (t.budget = i), ["TV everywhere: national reach.", "Organizers and doors: strongest in the states you target.", "A bit of everything.", "Online ads and creators: reach, especially among the young."]);
+label(g, "Battleground focus: pick three", (mx + 20), 356, C_DIM);
+let bgs = Govern.battlegrounds(t);
+let nf = 0;
+for (let s = 0; (s < NS); s++) { if (t.focusSt[s]) { nf++; } }
+let pm = (Govern.projection(t) + t.pollErr);
+for (let i = 0; (i < bgs.length); i++) {
+let s = bgs[i];
+let rx = ((mx + 20) + (((i % 2)) * 284)), ry = (370 + (($idiv(i, 2)) * 34));
+let ss = s;
+let nff = nf;
+u.toggle(g, rx, ry, t.focusSt[s], () => {
+if (t.focusSt[ss]) { t.focusSt[ss] = false; } else { if ((nff < 3)) { t.focusSt[ss] = true; } }
+}, (("Extra visits, offices and ads in " + STATES[s].name) + "."));
+text(g, STATES[s].name, (rx + 46), (ry + 16), F_S, (t.focusSt[s] ? Color.white : C_DIM));
+let m = Govern.stateMargin(t, s, pm);
+textR(g, (((Govern.mine(t, m) ? "You +" : (t.oppLast + " +"))) + fmt1(Math.abs(m))), (rx + 270), (ry + 16), F_XSB, (Govern.mine(t, m) ? C_GOOD : C_BAD));
+}
+u.button$8(g, ((DW - 48) - 300), 832, 300, 44, "On to the fall", B_GOLD, () => {
+t.stage = Govern.ST_CAMP2;
+t.warChest = Math.min(4, t.warChest);
+snd$1(Sfx.CHIME);
+});
+} else {
+let dn = ["First debate", "Second debate", "Third debate"];
+for (let i = 0; (i < 3); i++) {
+let y = (170 + (i * 150));
+let k = i;
+text(g, dn[i], (mx + 20), y, F_H3, Color.white);
+if ((i < t.debatesHeld)) {
+let pct = Math.round(clamp((50 + (9 * t.debScore[i])), 20, 80));
+text(g, ("You went with: " + Govern.DEBATE[t.debate[i]]), (mx + 20), (y + 28), F_XS, C_DIM);
+text(g, ((pct >= 50) ? (((("Viewers say you won, " + pct) + "-") + ((100 - pct))) + ".") : (((((("Viewers give it to " + t.oppLast) + ", ") + ((100 - pct))) + "-") + pct) + ".")), (mx + 20), (y + 56), F_BB, ((pct >= 50) ? C_GOOD : C_BAD));
+} else { if ((i === t.debatesHeld)) {
+u.segmented(g, (mx + 20), (y + 14), (mw - 40), 32, Govern.DEBATE, t.debate[i], (v) => (t.debate[k] = v), ["Point to what you've done.", "Go after the challenger's agenda.", "Look ahead to a second term.", "A risky line that could go viral, for better or worse."]);
+u.button$8(g, (mx + 20), (y + 60), 240, 36, "Hold the debate", B_PRIMARY, () => (Govern.holdDebate(game, t, k)));
+} else { text(g, "Later in the fall.", (mx + 20), (y + 28), F_XS, C_DIM); } }
+}
+label(g, "Your closing argument", (mx + 20), 640, C_DIM);
+u.segmented(g, (mx + 20), 650, (mw - 40), 32, Govern.CLOSING, t.closing, (i) => (t.closing = i), ["Strong when the economy is growing.", "Experience and calm: a safe, modest gain.", "Fire up your base: stronger when they're energized."]);
+let ready = (t.debatesHeld >= 3);
+u.button$9(g, ((DW - 48) - 300), 832, 300, 44, "Election Night", (ready ? B_GOLD : B_OFF), (ready ? () => {
+Govern.elect32(game, t);
+Govern.nightT0 = -1;
+Govern.nightAll = false;
+SaveGame.save(u, SaveGame.AUTO);
+} : null), (ready ? null : "Hold all three debates first."));
+}
+let rx = 1080, rw = ((DW - 48) - rx);
+u.panel(g, rx, 124, rw, 690, "Where the race stands");
+let pm = (Govern.projection(t) + t.pollErr);
+text(g, ((pm >= 0) ? ("You lead by " + fmt1(pm)) : ((t.oppLast + " leads by ") + fmt1(-pm))), (rx + 20), 172, F_H2, ((pm >= 0) ? C_GOOD : C_BAD));
+text(g, "National polling average", (rx + 20), 194, F_XS, C_DIM);
+let ev = Govern.ev2030();
+let me = 0;
+let m = $arr(NS, 0);
+for (let s = 0; (s < NS); s++) {
+m[s] = Govern.stateMargin(t, s, pm);
+if (Govern.mine(t, m[s])) { me += ev[s]; }
+}
+text(g, ((((("Projected electoral votes: you " + me) + ", ") + t.oppLast) + " ") + ((538 - me))), (rx + 20), 222, F_S, Color.white);
+text(g, "2030 census map: Texas 42, Florida 33, California 50.", (rx + 20), 244, F_T, C_DIM);
+Govern.senateMap(u, g, game, m, (rx + 10), 270, (rw - 20), 380);
+u.button$8(g, 48, 832, 220, 44, "Main menu", B_GHOST, () => {
+SaveGame.save(u, SaveGame.AUTO);
+u.go(SC_HOME);
+});
+}
+static night(u, g, game, t) {
+if ((Govern.nightT0 < 0)) { Govern.nightT0 = u.tsec; }
+let el = (Govern.nightAll ? 1e6 : (u.tsec - Govern.nightT0)), hour = (18.8 + (el * 0.8));
+Screens.header(u, g, "Election Night 2032", "Tuesday, November 2, 2032");
+let ev = Govern.ev2030();
+let me = 0, op = 0, shown = 0;
+let f = USMap.fit(48, 170, 1050, 620);
+for (let s = 0; (s < NS); s++) {
+let in_ = (STATES[s].close <= hour);
+if (in_) {
+shown++;
+if (Govern.mine(t, t.m32[s])) { me += ev[s]; } else { op += ev[s]; }
+}
+USMap.cur[s] = (in_ ? marginColor(t.m32[s], 1) : C_STATE);
+}
+Night.fitDraw(u, g, f);
+let px = 1116, pw = ((DW - 48) - px);
+u.panel(g, px, 124, pw, 690, "Electoral votes");
+text(g, (t.presLast + " (you)"), (px + 20), 180, F_H3, partyColor(t.party));
+text(g, String(me), (px + 20), 236, F_NUMXL, Color.white);
+text(g, t.oppLast, (px + 20), 300, F_H3, partyColor(t.oppParty));
+text(g, String(op), (px + 20), 356, F_NUMXL, Color.white);
+text(g, "270 to win", (px + 20), 392, F_XS, C_DIM);
+let all = (shown >= NS);
+if ((((me >= 270) || (op >= 270)) || all)) {
+let w = (all ? t.reelected : (me >= 270));
+text(g, (w ? "Four more years." : (t.oppLast + " wins.")), (px + 20), 450, F_H2, (w ? C_GOLD : C_BAD));
+wrap(g, (((me === 269) && (op === 269)) ? ("A 269-269 tie. The new House decides, one vote per state, and picks " + ((w ? "you." : (t.oppName + ".")))) : (w ? "The networks call the race: you have been re-elected." : (("The networks call the race for " + t.oppName) + ". You will leave office in January."))), (px + 20), 474, (pw - 40), F_S, C_TEXT);
+}
+if (all) {
+text(g, (("Popular vote: you " + fmt1(t.pop32P)) + "%"), (px + 20), 560, F_S, C_TEXT);
+text(g, ("House: " + Govern.seats(t.houseD32, 435)), (px + 20), 586, F_S, C_TEXT);
+text(g, ("Senate: " + Govern.seats(t.senateD32, 100)), (px + 20), 612, F_S, C_TEXT);
+}
+if (!all) { u.button$8(g, ((DW - 48) - 300), 832, 300, 44, "Skip to the end", B_NORM, () => (Govern.nightAll = true)); } else { u.button$8(g, ((DW - 48) - 300), 832, 300, 44, "One year later", B_GOLD, () => (Govern.finish(u, game, t))); }
+}
+static epilogueScreen(u, g) {
+let game = u.game;
+let t = ((game != null) ? game.term : null);
+if ((t == null)) {
+u.go(SC_HOME);
+return;
+}
+Govern.record(game, t);
+let lost = t.lost2028;
+let title = (lost ? "One Year Later" : (t.reelected ? "Four More Years" : "A One-Term President"));
+Screens.header(u, g, title, (lost ? "November 2029" : "November 2033, one year after the election"));
+u.panel(g, 48, 124, 880, 690, (lost ? "Where things stand" : (("The " + t.presLast) + " years")));
+let y = 168;
+for (const sec of t.epi) {
+if ((y > 780)) { break; }
+if ((sec[0].length > 0)) {
+label(g, sec[0], 68, y, C_GOLD);
+y += 18;
+}
+for (const line of $split(sec[1], "\n")) {
+if ((line.length === 0)) { continue; }
+y += (4 + wrap(g, line, 68, y, 840, F_XS, C_TEXT));
+}
+y += 14;
+}
+let px = 944, pw = ((DW - 48) - px);
+let a = (lost ? t.next : t);
+u.panel(g, px, 124, pw, 690, ((lost && (a != null)) ? (("President " + a.presLast) + "'s approval") : "Your approval over four years"));
+if ((a != null)) {
+let v = a.appHist;
+let n = a.nHist;
+Govern.chart$11(g, (px + 46), 170, (pw - 66), 200, v, n, 30, 70, C_GOLD, (lost ? 4 : 16));
+if (lost) {
+let qs = ["Jan 2029", "Spring", "Summer", "Fall", "Nov 2029"];
+for (let i = 0; (i < 5); i++) { textC(g, qs[i], ((px + 46) + ((((pw - 66)) * i) / 4.0)), 392, F_T, C_DIM); }
+} else { for (let yr = 0; (yr < 4); yr++) { textC(g, String((2029 + yr)), ((px + 46) + ((((pw - 66)) * (((yr * 4) + 2))) / 16.0)), 392, F_T, C_DIM); } }
+}
+if ((lost && (a != null))) {
+let rows = [["New laws", String(Govern.laws(a))], ["Approval now", (Math.round(a.approval) + "%")], ["Unemployment", (fmt1(a.unemp) + "%")], ["Inflation", (fmt1(a.inflation) + "%")], ["House", Govern.seats(a.houseD, 435)], ["Senate", Govern.seats(a.senateD, 100)]];
+let yy = 440;
+for (const rw of rows) {
+text(g, rw[0], (px + 20), yy, F_S, C_TEXT);
+textR(g, rw[1], ((px + pw) - 20), yy, F_BB, Color.white);
+yy += 30;
+}
+}
+if (!lost) {
+let rows = [["Laws and orders", String(Govern.laws(t))], ["Approval at the end", (Math.round(t.approval) + "%")], ["2032 electoral votes", ((t.ev32P + " - ") + t.ev32O)], ["Historians' early rank", (Govern.ordinal(Govern.rank(t)) + " of 47")], ["Presidency score", thousands(Govern.score$1(t))]];
+let yy = 440;
+for (const rw of rows) {
+text(g, rw[0], (px + 20), yy, F_S, C_TEXT);
+textR(g, rw[1], ((px + pw) - 20), yy, F_BB, Color.white);
+yy += 30;
+}
+let e = [];
+Govern.earned(game, e);
+if (!(e.length === 0)) {
+label(g, "Achievements", (px + 20), (yy + 16), C_GOLD);
+yy += 36;
+for (const id of e) {
+text(g, Legacy.achName(id), (px + 20), yy, F_XSB, Color.white);
+yy += 20;
+}
+}
+}
+u.button$8(g, 48, 832, 220, 44, "Main menu", B_GHOST, () => (u.go(SC_HOME)));
+u.button$8(g, ($idiv(DW, 2) - 150), 832, 300, 44, "Hall of Fame", B_NORM, () => (u.go(SC_HALL)));
+u.button$8(g, ((DW - 48) - 260), 832, 260, 44, "New campaign", B_GOLD, () => {
+u.setup = new Settings();
+u.go(SC_SETUP);
+});
+}
+static score(...a) { switch (a.length) {
+case 2: return Govern.score$2(...a);
+case 1: return Govern.score$1(...a);
+} }
+static names(...a) { switch (a.length) {
+case 1: return Govern.names$1(...a);
+case 2: return Govern.names$2(...a);
+} }
+static chart(...a) { switch (a.length) {
+case 10: return Govern.chart$10(...a);
+case 11: return Govern.chart$11(...a);
+} }
+}
 class Test {
 static run(a) {
 let t0 = Date.now();
@@ -16185,6 +17774,12 @@ ImageIO.write(img, "png", new File(a[1]));
 } catch (e) {
 console.error(e);
 }
+}
+if ($eq(what, "govern")) {
+let runs = ((a.length > 1) ? parseInt(a[1], 10) : 1);
+let cand_ = ((a.length > 2) ? a[2] : "shapiro");
+let scen = ((a.length > 3) ? parseInt(a[3], 10) : SC_BASE);
+for (let r = 0; (r < runs); r++) { Test.govern((3000 + r), cand_, scen); }
 }
 if ($eq(what, "batch")) {
 let s = new Settings();
@@ -16396,6 +17991,17 @@ cs.seed = 44;
 cs.myParty = true;
 u.go(SC_SETUP);
 Test.shot(u, dir, "v3_setup");
+cs.role = ROLE_WATCH;
+u.go(SC_SETUP);
+Test.shot(u, dir, "v3_setup_watch");
+cs.role = ROLE_MANAGER;
+cs.primaryOnly = true;
+cs.mode = MODE_FULL;
+u.go(SC_SETUP);
+Test.shot(u, dir, "v3_setup_manager");
+cs.role = ROLE_CANDIDATE;
+cs.primaryOnly = false;
+cs.mode = MODE_SUMMER;
 Screens.startGame(u, candById("shapiro"));
 u.modal = null;
 let vg = u.game;
@@ -16458,6 +18064,69 @@ u.go(SC_END);
 Test.shot(u, dir, "v3_end");
 u.go(SC_HALL);
 Test.shot(u, dir, "v3_hall");
+u.game = null;
+}
+if ((all || which.includes("v4"))) {
+let gs = new Settings();
+gs.mode = MODE_GENERAL;
+gs.candId = "shapiro";
+gs.party = DEM;
+gs.seed = 3001;
+gs.staff.fill(true);
+u.setup = gs;
+let gg = Setup.newGame(gs);
+while (((gg.phase !== PH_OVER) && (gg.week <= ELECTION_WEEK))) {
+Test.autoPending(gg);
+for (const d of Debates.thisWeek(gg)) {
+let run = Debates.start(gg, d);
+while (!run.over) { Debates.segment$3(gg, run, ((run.myIdx >= 0) ? Debates.aiTactic(gg, run, run.myIdx) : -1)); }
+}
+Week.resolve(gg);
+}
+Test.autoPending(gg);
+u.game = gg;
+u.modal = null;
+u.go(SC_END);
+Test.shot(u, dir, "v4_end");
+Govern.begin(u);
+let tt = gg.term;
+for (const k of [0, 5, 11]) { tt.bills[k].priority = true; }
+Test.shot(u, dir, "v4_agenda");
+tt.stage = Govern.ST_DESK;
+tt.pick = 0;
+tt.approach = Govern.AP_RECON;
+Test.shot(u, dir, "v4_desk");
+Govern.act(gg, tt, 0, Govern.AP_RECON, false);
+tt.pick = -1;
+while ((tt.q < 8)) { Govern.aiQuarter(gg, tt); }
+tt.stage = Govern.ST_MIDTERM;
+u.modal = null;
+Test.shot(u, dir, "v4_midterm");
+tt.stage = Govern.ST_AGENDA2;
+Test.shot(u, dir, "v4_agenda2");
+tt.stage = Govern.ST_DESK;
+while ((tt.q < 14)) { Govern.aiQuarter(gg, tt); }
+u.modal = null;
+u.modalQueue.clear();
+Test.shot(u, dir, "v4_camp1");
+tt.stage = Govern.ST_CAMP2;
+Govern.holdDebate(gg, tt, 0);
+Test.shot(u, dir, "v4_camp2");
+Govern.holdDebate(gg, tt, 1);
+Govern.holdDebate(gg, tt, 2);
+Govern.elect32(gg, tt);
+Govern.nightAll = true;
+Test.shot(u, dir, "v4_night");
+Govern.wrapUp(gg, tt);
+u.go(SC_EPILOGUE);
+Test.shot(u, dir, "v4_epilogue");
+gg.term = null;
+gg.evD = 200;
+gg.evR = 338;
+u.go(SC_END);
+Test.shot(u, dir, "v4_end_lost");
+Govern.oneYearLater(u);
+Test.shot(u, dir, "v4_epilogue_lost");
 u.game = null;
 }
 if ((all || which.includes("brief"))) {
@@ -16870,6 +18539,56 @@ if ($eq(k, "primonly")) { s.primaryOnly = true; }
 if ($eq(k, "role")) { s.role = parseInt(v, 10); }
 }
 }
+static govern(seed, cand_, scen) {
+let set = new Settings();
+set.mode = MODE_GENERAL;
+set.candId = cand_;
+set.scenario = scen;
+set.seed = seed;
+set.party = candById(cand_).party;
+set.staff.fill(true);
+let g = Setup.newGame(set);
+while (((g.phase !== PH_OVER) && (g.week <= ELECTION_WEEK))) {
+Test.autoPending(g);
+for (const d of Debates.thisWeek(g)) {
+let run = Debates.start(g, d);
+while (!run.over) { Debates.segment$3(g, run, ((run.myIdx >= 0) ? Debates.aiTactic(g, run, run.myIdx) : -1)); }
+}
+Week.resolve(g);
+}
+Test.autoPending(g);
+let me = g.me();
+let won = Legacy.won(g);
+console.log(((((((((((("=== seed " + seed) + " 2028: ") + me.name()) + ((won ? " wins " : " loses "))) + g.evD) + "-") + g.evR) + ", House D ") + g.houseSeatsD) + ", Senate D ") + General.senateSeats(g)));
+let t;
+if (!won) { t = Govern.lossTerm(g); } else {
+t = Govern.start(g, me);
+Govern.aiPriorities(g, t);
+t.stage = Govern.ST_DESK;
+while ((t.q < 14)) { Govern.aiQuarter(g, t); }
+for (let i = 0; (i < 3); i++) {
+t.debate[i] = ((t.approval >= 48) ? 0 : 2);
+Govern.holdDebate(g, t, i);
+}
+t.stage = Govern.ST_CAMP2;
+Govern.elect32(g, t);
+Govern.wrapUp(g, t);
+}
+g.term = t;
+if (!t.lost2028) {
+let ap = new StringBuilder();
+for (let i = 0; (i < t.nHist); i++) { ap.append(Math.round(t.appHist[i])).append(String.fromCharCode(32)); }
+console.log((((((("  approval " + ap) + "| laws ") + Govern.laws(t)) + " (") + Govern.names$1(t)) + ")"));
+console.log((((((("  midterm: president's party " + margin(t.midMargin)) + ", House D ") + t.houseD30) + ", Senate D ") + t.senateD30) + ((t.filibusterGone ? ", filibuster gone" : ""))));
+console.log(((((((((((((((((("  2032 vs " + t.oppName) + ": ") + t.ev32P) + "-") + t.ev32O) + " (") + fmt1(t.pop32P)) + "%), ") + ((t.reelected ? "RE-ELECTED" : "defeated"))) + ", House D ") + t.houseD32) + ", Senate D ") + t.senateD32) + ", score ") + Govern.score$1(t)) + ", rank ") + Govern.rank(t)));
+}
+for (const e of t.epi) { console.log(((("  [" + e[0]) + "] ") + $replace(e[1], "\n", " / "))); }
+let ach = [];
+Govern.earned(g, ach);
+let ab = new StringBuilder();
+for (const x of ach) { ab.append(((ab.length > 0) ? ", " : "")).append(x); }
+if (!(ach.length === 0)) { console.log(("  achievements " + ab)); }
+}
 static game(seed, mode, cand_, scen, verbose) {
 let t0 = Date.now();
 let set = new Settings();
@@ -17212,6 +18931,12 @@ Contested.draw(this, g);
 break;
 case SC_BATCH:
 Batch.draw(this, g);
+break;
+case SC_GOVERN:
+Govern.draw(this, g);
+break;
+case SC_EPILOGUE:
+Govern.epilogueScreen(this, g);
 break;
 default:
 break;
@@ -18007,7 +19732,7 @@ case 8: return this.slider$8(...a);
 case 9: return this.slider$9(...a);
 } }
 }
-const $CLASSES = {Battleground2028, Voice, Sfx, StateDef, Faction, Look, Cand, JPromise, Endorser, Settings, InternalPoll, News, Appearance, Rally, Camp, Contest, Debate, SenateRace, Game, Elect, Vote, Setup, Week, World, Message, Polls, Events, Primary, Offer, Endorse, General, Line, DebateRun, Debates, AI, Staff, Campaign, NameId, Issues, Closing, Ballot, Digital, Show, Podcasts, Rallies, Hit, Toast, Modal, Popup, Portrait, USMap, Screens, PlatformEd, Creator, Hq, Tabs, StatePanel, DebateView, Night, SaveGame, Briefing, Deals, FieldScreen, Loading, LoadingGame, Results, TutorialStep, Tutorial, Custom, Convention, Press, Scandal, Staffer, Staffers, Ad, AdStudio, Senate, VpPlan, Forecast, Advisor, Legacy, Counties, Anchor, Contested, Manager, Watch, Batch, Test};
+const $CLASSES = {Battleground2028, Voice, Sfx, StateDef, Faction, Look, Cand, JPromise, Endorser, Settings, InternalPoll, News, Appearance, Rally, Camp, Contest, Debate, SenateRace, Game, Elect, Vote, Setup, Week, World, Message, Polls, Events, Primary, Offer, Endorse, General, Line, DebateRun, Debates, AI, Staff, Campaign, NameId, Issues, Closing, Ballot, Digital, Show, Podcasts, Rallies, Hit, Toast, Modal, Popup, Portrait, USMap, Screens, PlatformEd, Creator, Hq, Tabs, StatePanel, DebateView, Night, SaveGame, Briefing, Deals, FieldScreen, Loading, LoadingGame, Results, TutorialStep, Tutorial, Custom, Convention, Press, Scandal, Staffer, Staffers, Ad, AdStudio, Senate, VpPlan, Forecast, Advisor, Legacy, Counties, Anchor, Contested, Manager, Watch, Batch, Pol, Bill, Term, Govern, Test};
 const $JDEF = {Voice: {d: null, pos: 0, rate: 0, vol: 0},
 Sfx: {lib: null, voices: null, rnd: null, running: false, enabled: false, volume: 0, line: null},
 StateDef: {ab: null, name: null, region: null, ev: 0, d24: 0, r24: 0, t24: 0, d20: 0, r20: 0, t20: 0, d16: 0, r16: 0, t16: 0, m22: 0, white: 0, black: 0, hisp: 0, other: 0, asian: 0, nativeAm: 0, u29: 0, o65: 0, nocol: 0, nocolW: 0, rural: 0, income: 0, cvap: 0, wev: 0, wca: 0, jew: 0, lds: 0, arab: 0, cuban: 0, pr: 0, union: 0, vet: 0, gun: 0, lgbt: 0, urban: 0, close: 0, countSpeed: 0, cx: 0, cy: 0},
@@ -18025,7 +19750,7 @@ Camp: {c: null, idx: 0, party: 0, human: false, active: false, announced: false,
 Contest: {party: 0, state: 0, week: 0, caucus: false, wta: false, done: false, delegates: 0, result: null, won: null, label: null},
 Debate: {week: 0, host: 0, party: 0, vp: false, done: false, mutedMics: false, audience: false, length: 0, score: null, participants: null, summary: null, thresholdPoll: 0, thresholdDonors: 0},
 SenateRace: {state: 0, party: 0, incumbent: null, note: null, base: 0, margin: 0, open: false, help: 0},
-Game: {version: 0, set: null, week: 0, phase: 0, player: 0, rng: null, camps: null, dNom: 0, rNom: 0, vpD: null, vpR: null, vpI: null, approval: 0, unemp: 0, inflation: 0, gdp: 0, env: 0, envDrift: 0, consumer: 0, salience: null, newsSal: null, houseD: 0, senateD: 0, demHouse: false, polls: null, pubAvg: null, pubN: null, natPubAvg: 0, natHist: null, natIHist: null, news: null, contests: null, debates: null, senate: null, banked: null, result: null, evD: 0, evR: 0, evO: 0, popD: 0, popR: 0, popO: 0, cdWinner: null, pending: null, lastWeekSummary: null, debateTalks: 0, debateDeal: null, trumpEndorse: 0, contested: false, clinchWeekD: 0, clinchWeekR: 0, mood: 0, natErr: 0, stateErr: null, houseEffect: null, senateNoise: null, warWeeks: 0, warStart: 0, primaryPoll: null, day: 0, mipHist: null, trustHist: null, trustRival: null, houseMargin: 0, houseSeatsD: 0, contingent: 0, evI: 0, popI: 0, pubI: null, natPubI: 0, dirty: false, lastEvent: 0, pendingState: 0, spectator: false, oddsHist: null, startEnv: 0, recorded: false, contestPending: 0, resumePhase: 0, dApp: 0, dUnemp: 0, dInfl: 0, dGdp: 0, dRight: 0, cellAdj: null, turnAdj: null, thirdShare: null},
+Game: {version: 0, set: null, week: 0, phase: 0, player: 0, rng: null, camps: null, dNom: 0, rNom: 0, vpD: null, vpR: null, vpI: null, approval: 0, unemp: 0, inflation: 0, gdp: 0, env: 0, envDrift: 0, consumer: 0, salience: null, newsSal: null, houseD: 0, senateD: 0, demHouse: false, polls: null, pubAvg: null, pubN: null, natPubAvg: 0, natHist: null, natIHist: null, news: null, contests: null, debates: null, senate: null, banked: null, result: null, evD: 0, evR: 0, evO: 0, popD: 0, popR: 0, popO: 0, cdWinner: null, pending: null, lastWeekSummary: null, debateTalks: 0, debateDeal: null, trumpEndorse: 0, contested: false, clinchWeekD: 0, clinchWeekR: 0, mood: 0, natErr: 0, stateErr: null, houseEffect: null, senateNoise: null, warWeeks: 0, warStart: 0, primaryPoll: null, day: 0, mipHist: null, trustHist: null, trustRival: null, houseMargin: 0, houseSeatsD: 0, contingent: 0, evI: 0, popI: 0, pubI: null, natPubI: 0, dirty: false, lastEvent: 0, pendingState: 0, spectator: false, oddsHist: null, startEnv: 0, recorded: false, contestPending: 0, resumePhase: 0, term: null, dApp: 0, dUnemp: 0, dInfl: 0, dGdp: 0, dRight: 0, cellAdj: null, turnAdj: null, thirdShare: null},
 Offer: {promises: null, cabinet: false, vp: false, speaking: false},
 Line: {text: null, tag: null, tactic: 0, target: 0, bonus: 0, sd: 0},
 DebateRun: {d: null, parts: null, vpCands: null, seg: 0, nSeg: 0, topics: null, score: null, last: null, lastTactic: null, attacks: null, zingers: null, lines: null, dial: null, over: false, headline: null, myIdx: 0, pickTactic: 0, options: null, rebutBy: 0, rebutAttack: 0, rebutPower: 0},
@@ -18037,6 +19762,9 @@ Popup: {x: 0, y: 0, w: 0, title: null, items: null, tips: null, right: null, col
 TutorialStep: {title: null, body: null, tryIt: null, rect: null, cond: null},
 Staffer: {name: null, role: 0, trait: 0, skill: 0, salary: 0, loyalty: 0, hired: 0},
 Ad: {name: null, tone: 0, issue: 0, group: 0, messenger: 0, quality: 0, tested: 0, groupScore: null, quotes: null, week: 0},
+Pol: {party: 0, fmt: 0, name: null, desc: null, impact: null, support: 0, unity: 0, cross: 0, gdp: 0, unemp: 0, infl: 0, base: 0, recon: false, exec: false},
+Bill: {id: 0, status: 0, quarter: 0, tries: 0, strength: 0, priority: false, second: false},
+Term: {party: 0, list: 0, oppParty: 0, presName: null, presLast: null, presId: null, vpName: null, oppName: null, oppLast: null, oppId: null, challenger: null, q: 0, stage: 0, approval: 0, unemp: 0, inflation: 0, gdp: 0, approval0: 0, unemp0: 0, inflation0: 0, gdp0: 0, shock: 0, houseD: 0, senateD: 0, houseD0: 0, senateD0: 0, houseD30: 0, senateD30: 0, houseD32: 0, senateD32: 0, filibusterGone: false, voted: false, lost2028: false, reelected: false, recorded: false, ai: false, reconYear: 0, capital: 0, pick: 0, approach: 0, focus: 0, flags: 0, lastH: 0, lastS: 0, goPublic: false, bills: null, log: null, appHist: null, nHist: 0, m28: null, w28: null, sen30: null, sen32: null, m32: null, nat28: 0, pm28: 0, partyBuild: 0, warChest: 0, enthusiasm: 0, midMargin: 0, primaryHit: 0, pollErr: 0, theme: 0, budget: 0, closing: 0, debatesHeld: 0, ev32P: 0, ev32O: 0, partisan: 0, debate: null, debScore: null, focusSt: null, nat32: 0, pop32P: 0, epi: null, next: null},
 Battleground2028: {frame: null, timer: null, screen: 0, prevScreen: 0, screenT: 0, game: null, setup: null, sc: 0, ox: 0, oy: 0, winW: 0, winH: 0, mx: 0, my: 0, pressX: 0, pressY: 0, pressed: false, tsec: 0, lastNanos: 0, hits: null, scrolls: null, tip: null, dragging: null, layer: 0, topLayer: 0, editId: null, editBuf: null, editSet: null, toasts: null, modal: null, modalQueue: null, popup: null, lastHover: null, modalTimes: null}};
 // ---- functions
 function clamp(v, lo, hi) {
@@ -19492,6 +21220,8 @@ var SC_FORECAST = 19;
 var SC_HALL = 20;
 var SC_CONTEST = 21;
 var SC_BATCH = 22;
+var SC_GOVERN = 23;
+var SC_EPILOGUE = 24;
 var SANS = pickFont(["Inter", "Segoe UI", "Helvetica Neue", "SF Pro Text", "Roboto", "Noto Sans", "Open Sans", "Lato", "DejaVu Sans", "Liberation Sans", "Arial"], "SansSerif");
 var SERIF = pickFont(["Georgia", "Playfair Display", "Merriweather", "Cambria", "DejaVu Serif", "Liberation Serif", "Times New Roman"], "Serif");
 var MONO = pickFont(["JetBrains Mono", "Cascadia Mono", "Consolas", "Menlo", "SF Mono", "DejaVu Sans Mono", "Liberation Mono", "Courier New"], "Monospaced");
@@ -19826,7 +21556,7 @@ Advisor.noteWeek = -99;
 Advisor.noteDay = -99;
 Advisor.idx = 0;
 Advisor.hidden = false;
-Legacy.ACH = [["landslide", "Landslide", "Win 400 or more electoral votes."], ["squeaker", "Squeaker", "Win with fewer than 280 electoral votes."], ["mandate", "Popular mandate", "Win the popular vote by 5 points or more."], ["ecOnly", "Electoral College only", "Win the presidency while losing the popular vote."], ["enemy", "Into enemy territory", "Carry a state your party lost by 10 points or more in 2024."], ["wall", "The blue wall (or the red one)", "Carry Pennsylvania, Michigan and Wisconsin."], ["sunbelt", "Sun Belt sweep", "Carry Arizona, Georgia, Nevada and North Carolina."], ["texas", "Lone Star", "Carry Texas as a Democrat (or California as a Republican)."], ["comeback", "The comeback", "Win after trailing by 3 points or more on Labor Day."], ["longshot", "Long shot", "Win the nomination after opening below 5% in the primary polls."], ["knockout", "Early knockout", "Clinch the nomination before April."], ["coattails", "Coattails", "Win the presidency with your party holding 52 or more Senate seats."], ["smalldollar", "Small-dollar army", "Win with half your money from small donors."], ["doors", "Shoe leather", "Knock 50 million doors."], ["debater", "Debate champion", "Win every general-election debate you take part in (at least two)."], ["clean", "Clean campaign", "Win without ever running an attack ad."], ["thirdway", "Third way", "Carry a state as an independent or third-party candidate."], ["indwin", "History maker", "Win the presidency as an independent."], ["house", "Twelfth Amendment", "Send the election to the House."], ["hard", "Hard mode", "Win on Hard."], ["underdog", "Underdog", "Win when the national mood favoured the other party by 3 points or more at the start."], ["fifty", "Fifty-state strategy", "Open field offices in 40 or more states."], ["press", "Silver tongue", "Land six or more answers at press conferences."], ["oratory", "Oratory", "Give a convention speech for the ages."]];
+Legacy.ACH = [["landslide", "Landslide", "Win 400 or more electoral votes."], ["squeaker", "Squeaker", "Win with fewer than 280 electoral votes."], ["mandate", "Popular mandate", "Win the popular vote by 5 points or more."], ["ecOnly", "Electoral College only", "Win the presidency while losing the popular vote."], ["enemy", "Into enemy territory", "Carry a state your party lost by 10 points or more in 2024."], ["wall", "The blue wall (or the red one)", "Carry Pennsylvania, Michigan and Wisconsin."], ["sunbelt", "Sun Belt sweep", "Carry Arizona, Georgia, Nevada and North Carolina."], ["texas", "Lone Star", "Carry Texas as a Democrat (or California as a Republican)."], ["comeback", "The comeback", "Win after trailing by 3 points or more on Labor Day."], ["longshot", "Long shot", "Win the nomination after opening below 5% in the primary polls."], ["knockout", "Early knockout", "Clinch the nomination before April."], ["coattails", "Coattails", "Win the presidency with your party holding 52 or more Senate seats."], ["smalldollar", "Small-dollar army", "Win with half your money from small donors."], ["doors", "Shoe leather", "Knock 50 million doors."], ["debater", "Debate champion", "Win every general-election debate you take part in (at least two)."], ["clean", "Clean campaign", "Win without ever running an attack ad."], ["thirdway", "Third way", "Carry a state as an independent or third-party candidate."], ["indwin", "History maker", "Win the presidency as an independent."], ["house", "Twelfth Amendment", "Send the election to the House."], ["hard", "Hard mode", "Win on Hard."], ["underdog", "Underdog", "Win when the national mood favoured the other party by 3 points or more at the start."], ["fifty", "Fifty-state strategy", "Open field offices in 40 or more states."], ["press", "Silver tongue", "Land six or more answers at press conferences."], ["oratory", "Oratory", "Give a convention speech for the ages."], ["reelected", "Four more years", "Win re-election in 2032."], ["lawmaker", "Lawmaker", "Pass all three of your first-term priorities."], ["midterm", "Defy history", "Keep your party's House majority through the 2030 midterms."], ["beloved", "Beloved", "Finish your term with approval of 55% or more."]];
 Legacy.FILE = "hall.txt";
 Counties.shape = null;
 Counties.bounds = null;
@@ -19886,6 +21616,34 @@ Batch.stateD = $arr(NS, 0);
 Batch.hist = $arr(54, 0);
 Batch.tip = $arr(NS, 0);
 Batch.nominees = new HashMap();
+Bill.serialVersionUID = 1;
+Term.serialVersionUID = 1;
+Govern.ST_AGENDA = 0;
+Govern.ST_DESK = 1;
+Govern.ST_MIDTERM = 2;
+Govern.ST_AGENDA2 = 3;
+Govern.ST_CAMP1 = 4;
+Govern.ST_CAMP2 = 5;
+Govern.ST_NIGHT = 6;
+Govern.ST_DONE = 7;
+Govern.AP_LINE = 0;
+Govern.AP_DEAL = 1;
+Govern.AP_RECON = 2;
+Govern.AP_EXEC = 3;
+Govern.PICK_FILIBUSTER = 99;
+Govern.SEASON = ["Winter", "Spring", "Summer", "Fall"];
+Govern.APPROACH = ["Party line", "Bipartisan deal", "Reconciliation", "Executive action"];
+Govern.FOCUS = ["The economy", "On the road", "World stage", "Party building"];
+Govern.THEME = ["Run on the record", "Draw the contrast", "The next four years"];
+Govern.BUDGET = ["Air war", "Ground game", "Balanced", "Digital first"];
+Govern.CLOSING = ["The economy", "Steady leadership", "Fight for the future"];
+Govern.DEBATE = ["Defend the record", "Attack their plan", "Talk about the future", "Go for the zinger"];
+Govern.CLASS1 = "AZ:D CA:D CT:D DE:D FL:R HI:D IN:R ME:D MD:D MA:D MI:D MN:D MS:R MO:R MT:R NE:R NV:D NJ:D NM:D NY:D ND:R OH:R PA:R RI:D TN:R TX:R UT:R VT:D VA:D WA:D WV:R WI:D WY:R";
+Govern.CLASS2 = "AL:R AK:R AR:R CO:D DE:D GA:D ID:R IL:D IA:R KS:R KY:R LA:R ME:R MA:D MI:D MN:D MS:R MT:R NE:R NH:D NJ:D NM:D NC:R OK:R OR:D RI:D SC:R SD:R TN:R TX:R VA:D WV:R WY:R";
+Govern.nightT0 = -1;
+Govern.nightAll = false;
+Govern.POL = [new Pol(DEM, "Lower Costs Act", "Caps insulin at $35 a month and child care at 7% of income, and bans junk fees.", 66, 0.95, 0.2, true, false, 0.05, 0, -0.15, "Families with young children save about $# a year on child care.", 3100, 0), new Pol(DEM, "A public option", "A government health plan on the ACA marketplaces in every state.", 58, 0.86, 0.04, true, false, 0, 0, -0.05, "# million more Americans have health insurance.", 4.6, 1), new Pol(DEM, "Restore Roe", "The Women's Health Protection Act: abortion rights written into federal law.", 60, 0.97, 0.03, false, false, 0, 0, 0, "Abortion is legal through viability in every state; # states had banned it.", 13, 2), new Pol(DEM, "Immigration reform", "Border security money plus a path to citizenship for Dreamers and long-time workers.", 61, 0.86, 0.28, false, true, 0.1, 0, 0, "# million Dreamers and long-time residents are on a path to citizenship.", 2.4, 1), new Pol(DEM, "Billionaire minimum tax", "A 25% minimum tax on households worth more than $100 million.", 63, 0.88, 0.02, true, false, -0.03, 0, -0.05, "The minimum tax raises about $# billion a year.", 50, 0), new Pol(DEM, "Build 3 million homes", "Zoning incentives, a builders' tax credit and federal land for housing.", 66, 0.9, 0.35, true, false, 0.12, -0.05, -0.08, "# million new homes are under construction.", 1.1, 1), new Pol(DEM, "AI safety standards", "Safety testing for the most powerful AI models, and data centers pay their own power bills.", 63, 0.92, 0.3, false, true, -0.02, 0, 0, "# frontier AI labs submit their models for federal safety testing.", 9, 0), new Pol(DEM, "Protect Social Security", "Lift the payroll-tax cap and raise benefits for the oldest retirees.", 68, 0.93, 0.08, false, false, 0, 0, 0, "Social Security's trust fund is solvent for # more years.", 30, 0), new Pol(DEM, "Gun safety", "Universal background checks, red-flag laws and a minimum age of 21 for assault weapons.", 58, 0.84, 0.06, false, true, 0, 0, 0, "Background checks cover # million more gun sales a year.", 6, 1), new Pol(DEM, "Clean energy buildout", "New transmission lines, permitting reform and clean-power tax credits.", 55, 0.86, 0.15, true, true, 0.15, -0.05, 0.02, "# gigawatts of new clean power are on the grid.", 120, 0), new Pol(DEM, "Voting rights", "The Freedom to Vote Act: national standards for early voting and mail ballots.", 60, 0.96, 0.02, false, false, 0, 0, 0, "# states have had to expand early voting.", 19, 2), new Pol(DEM, "Chips and China Act", "Chips, shipbuilding and export controls to compete with China.", 64, 0.9, 0.55, false, false, 0.1, -0.03, 0.03, "# new chip and shipbuilding plants are under way.", 14, 0), new Pol(DEM, "Paid leave", "Twelve weeks of paid family and medical leave for every worker.", 70, 0.9, 0.08, true, false, 0.02, 0, 0.03, "# million workers took paid leave in its first year.", 11, 1), new Pol(DEM, "Supreme Court term limits", "18-year terms for justices, two appointments per presidential term.", 58, 0.82, 0.02, false, false, 0, 0, 0, "The first justice with an 18-year term joins the Court in #.", 2035, 2), new Pol(REP, "Make the tax cuts bigger", "Extend the 2025 tax cuts and cut the corporate rate to 15%.", 45, 0.96, 0.04, true, false, 0.18, -0.05, 0.12, "The typical family pays about $# less in federal income tax.", 1500, 0), new Pol(REP, "Finish the wall", "Money for the border wall, more ICE agents and faster deportations.", 48, 0.94, 0.05, true, true, -0.05, 0, 0.05, "Border crossings are down #% from their 2028 level.", 40, 0), new Pol(REP, "Health freedom act", "Replace ACA subsidies with health savings accounts and state block grants.", 39, 0.85, 0.02, true, false, 0.03, 0, 0, "# million fewer Americans have health insurance.", 5.2, 1), new Pol(REP, "A 15-week abortion limit", "A national limit on abortion after 15 weeks, with exceptions.", 41, 0.78, 0.02, false, false, 0, 0, 0, "Abortion is limited after 15 weeks nationwide, including in # states that had allowed it.", 24, 2), new Pol(REP, "Reciprocal tariffs", "Match every country's tariffs, with a 60% floor on Chinese goods.", 42, 0.83, 0.08, false, true, -0.15, 0.08, 0.35, "Tariffs bring in about $# billion a year, and prices on imported goods are up.", 220, 0), new Pol(REP, "Energy dominance", "Open federal lands and waters to drilling and speed up permits for pipelines.", 53, 0.96, 0.22, true, true, 0.1, -0.03, -0.12, "US oil and gas output is up #%.", 9, 0), new Pol(REP, "Balance the budget", "Cap spending and cut federal agencies by a tenth.", 51, 0.82, 0.05, true, false, -0.12, 0.08, -0.15, "Federal spending is $# billion a year lower than planned.", 180, 0), new Pol(REP, "School choice", "A federal tax credit for private-school and home-school scholarships.", 52, 0.9, 0.08, true, false, 0, 0, 0, "# million children use the new scholarships.", 1.8, 1), new Pol(REP, "Back the blue", "Money for 100,000 police officers and tougher sentences for fentanyl dealers.", 57, 0.96, 0.3, false, false, 0, 0, 0, "# thousand new police officers are on the street.", 60, 0), new Pol(REP, "Decouple from China", "Ban investment in Chinese tech and bring medicine supply chains home.", 61, 0.92, 0.5, false, true, -0.05, 0, 0.1, "#% of America's generic medicines are now made in North America.", 35, 0), new Pol(REP, "AI dominance act", "Override state AI laws and fast-track data centers on federal land.", 42, 0.82, 0.18, false, true, 0.12, 0.03, 0, "# new data centers are under construction on federal land.", 40, 0), new Pol(REP, "Open up housing", "Sell federal land for homes and cut building regulations.", 58, 0.9, 0.3, true, true, 0.08, -0.03, -0.05, "# million new homes are under construction.", 0.9, 1), new Pol(REP, "The SAVE Act", "Proof of citizenship to register and photo ID to vote.", 63, 0.97, 0.05, false, false, 0, 0, 0, "Every state now requires photo ID to vote; # did not before.", 15, 2), new Pol(REP, "No tax on tips and overtime", "Make the tax break on tips and overtime permanent and wider.", 66, 0.96, 0.4, true, false, 0.05, 0, 0.05, "Workers keep about $# billion a year in tips and overtime pay.", 40, 0)];
+Govern.EV_TITLE = ["A hurricane hits the Gulf Coast", "A government shutdown looms", "Crisis in the Taiwan Strait", "A Supreme Court vacancy", "A scandal in your administration", "AI layoffs sweep white-collar jobs", "A mass shooting shocks the country", "A blowout jobs report", "Oil prices spike", "The economy is shrinking", "A court blocks your executive order", "The debt ceiling", "A new virus is spreading", "A surge at the southern border"];
 Test.aiOnly = false;
 Test.primOnly = false;
 Test.customSpec = null;
@@ -19972,7 +21730,7 @@ function $boot() {
     });
     window.addEventListener('keyup', e => { if (code0(e) !== undefined) p.keyReleased(new KeyEventW(code0(e), 0)); });
     function code0(e) { return KEYS[e.key] !== undefined ? KEYS[e.key] : (e.key.length === 1 ? e.key.toUpperCase().charCodeAt(0) : undefined); }
-    window.__bg = { get app() { return APP; }, Tutorial, Elect, Screens, Hq, Night, Results, Week, Setup, Settings, candById, DebateView, Debates, Tabs, Creator, FieldScreen, Deals, Polls, Loading, SaveGame, Primary, Endorse, Custom, Convention, Press, Scandal, Staffers, AdStudio, Senate, VpPlan, Forecast, Advisor, Legacy, Counties, Anchor, General, Vote, Game, Camp, Contested, Manager, Watch, Batch };
+    window.__bg = { get app() { return APP; }, Tutorial, Elect, Screens, Hq, Night, Results, Week, Setup, Settings, candById, DebateView, Debates, Tabs, Creator, FieldScreen, Deals, Polls, Loading, SaveGame, Primary, Endorse, Custom, Convention, Press, Scandal, Staffers, AdStudio, Senate, VpPlan, Forecast, Advisor, Legacy, Counties, Anchor, General, Vote, Game, Camp, Contested, Manager, Watch, Batch, Govern, Term };
     canvas.focus();
     resize();
     requestAnimationFrame(frame);
