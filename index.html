@@ -1553,10 +1553,10 @@ class Elect {
 static swing2026(c) {
 let b = cellBloc(c), a = cellAge(c);
 let v = 0;
-if (hispanic(b)) { v += 0.11; }
+if (hispanic(b)) { v += 0.15; }
 if ((b === B_BLK)) { v += 0.04; }
 if ((b === B_ASN)) { v += 0.06; }
-if ((a === AGE_YOUNG)) { v += 0.08; }
+if ((a === AGE_YOUNG)) { v += 0.11; }
 if (((b === B_WOT_C) || (b === B_WCA_C))) { v += 0.03; }
 return v;
 }
@@ -1752,10 +1752,18 @@ return l;
 }
 static calibrate() {
 let nat = [0, 0, 0];
+let w26 = 0, sum26 = 0, sum24 = 0;
+for (let s = 0; (s < NS); s++) {
+if (Number.isNaN(m26(s))) { continue; }
+let d = STATES[s];
+w26 += d.t24; sum26 += (d.t24 * m26(s)); sum24 += ((d.t24 * (((d.d24 / ((d.d24 + d.r24))) - Elect.NAT24))) * 200);
+}
+let nat26 = ((w26 > 0) ? (((sum26 - sum24)) / w26) : 0);
 for (let s = 0; (s < NS); s++) {
 let d = STATES[s];
 let sh24 = (d.d24 / ((d.d24 + d.r24))), sh20 = (d.d20 / ((d.d20 + d.r20))), sh22 = clamp((0.5 + (d.m22 / 200)), 0.05, 0.95);
 let rel = (((0.65 * ((sh24 - Elect.NAT24))) + (0.25 * ((sh20 - Elect.NAT20)))) + (0.10 * ((sh22 - Elect.NAT22))));
+if (!Number.isNaN(m26(s))) { rel = ((((0.60 * ((sh24 - Elect.NAT24))) + (0.22 * ((sh20 - Elect.NAT20)))) + (0.08 * ((sh22 - Elect.NAT22)))) + ((0.10 * ((m26(s) - nat26))) / 200)); }
 Elect.target[s] = clamp((Elect.NAT24 + rel), 0.03, 0.97);
 Elect.lean[s] = (rel * 200);
 Elect.stateVotes24[s] = d.t24;
@@ -7715,9 +7723,9 @@ wrap(g, SCEN_SHORT[i], (cx + 12), (cy + 126), 216, F_T, C_DIM);
 u.hit(cx, cy, 240, 204, () => ((s.scenario = k)), ((SCEN_NAME[i] + "\n") + SCEN_DESC[i]));
 }
 let cx = 1078, cw = 474;
-u.panel(g, cx, ay, cw, 300, "The 2026 midterms (forecast - editable)");
+u.panel(g, cx, ay, cw, 300, "The 2026 midterms (results - editable)");
 y = (ay + 44);
-wrap(g, "Polling as of October 28, 2026: the generic ballot average is about D+8.7 and the president's approval about 37%. Set the results you expect; they shape the national mood and the Senate map.", (cx + 18), y, (cw - 36), F_XS, C_DIM);
+wrap(g, "Results as of November 5, 2026: Democrats won the national House vote by about 13 points and about 255 seats (some still counting), and at least 54 Senate seats, with Alaska and Mississippi too close to call. Change them for a what-if; they shape the national mood and the Senate.", (cx + 18), y, (cw - 36), F_XS, C_DIM);
 y += 58;
 text(g, "House seats won by Democrats", (cx + 18), (y + 16), F_S, C_TEXT);
 u.stepper(g, (((cx + cw) - 18) - 128), y, String(s.midHouseD), () => ((s.midHouseD = Math.max(180, (s.midHouseD - 1)))), () => ((s.midHouseD = Math.min(280, (s.midHouseD + 1)))), null, 74);
@@ -7730,7 +7738,7 @@ y += 46;
 text(g, "National House vote", (cx + 18), (y + 14), F_S, C_TEXT);
 textR(g, margin(s.midGeneric), ((cx + cw) - 18), (y + 14), F_BB, ((s.midGeneric >= 0) ? C_DEM_L : C_REP_L));
 u.slider$8(g, (cx + 18), (y + 34), (cw - 36), (((s.midGeneric + 6)) / 20.0), ((s.midGeneric >= 0) ? C_DEM : C_REP), (v) => ((s.midGeneric = (Math.round(((((v * 20) - 6)) * 2)) / 2.0))), null);
-u.button$8(g, ((cx + cw) - 128), (ay + 12), 110, 22, "Reset forecast", B_SUBTLE, () => {
+u.button$8(g, ((cx + cw) - 128), (ay + 12), 110, 22, "Reset to results", B_SUBTLE, () => {
 s.midHouseD = MID_HOUSE_D;
 s.midSenateD = MID_SENATE_D;
 s.midGeneric = MID_GENERIC;
@@ -10713,7 +10721,9 @@ text(g, d.name, x, (y + 26), F_H1, Color.white);
 chip(g, (d.ev + " EV"), ((x + strW(g, d.name, F_H1)) + 10), (y + 12), C_GOLD, false);
 u.iconButton(g, ((x + w) - 26), (y + 6), 24, 24, IC_CLOSE, () => ((Hq.sel = -1)), "Back to the national picture (Esc)");
 let m24 = ((((d.d24 - d.r24)) / d.t24) * 100), m20 = ((((d.d20 - d.r20)) / d.t20) * 100);
-text(g, ((((("2024 " + margin(m24)) + "   2020 ") + margin(m20)) + "   2022 statewide ") + margin(d.m22)), x, (y + 46), F_XS, C_DIM);
+let m26s = m26(s);
+text(g, ((((("2024 " + margin(m24)) + "   2020 ") + margin(m20)) + "   2022 ") + margin(d.m22) + (Number.isNaN(m26s) ? "" : ("   2026 " + margin(m26s)))), x, (y + 46), F_XS, C_DIM);
+u.hit(x, (y + 34), (w - 30), 16, null, "Presidential results in 2024 and 2020; statewide results in 2022; in 2026, the average Democratic margin in the state's Senate and governor races.");
 u.segmented(g, x, (y + 56), w, 26, ["Overview", "Ads", "Field", "Voters"], Hq.rtab, (i) => {
 Hq.rtab = i;
 u.resetScroll("right");
@@ -16567,15 +16577,28 @@ new StateDef("WY", "Wyoming", "W", 3, [
 10], 21.0, 1, 307.8, 195.1)];
 var CD_NAMES = ["ME-1", "ME-2", "NE-1", "NE-2", "NE-3"];
 var CD_DATA = [[19, 1, 24.0, 23.1, 0.52], [19, 1, -9.1, -7.4, 0.48], [27, 1, -12.6, -11.2, 0.33], [27, 1, 4.6, 6.5, 0.34], [27, 1, -51.0, -53.2, 0.33]];
+// 2026 midterm results by state: average Democratic margin in the Senate and governor races (D-vs-R contests only),
+// as counted on 5 November 2026 (Fox News Decision Desk; some counts incomplete). States without one are left out.
+var M26_DATA = "AK 0.3 AL -6.8 AR -13.6 AZ 12.8 CA 28.7 CO 25.2 CT 18.7 DE 27.1 FL -2.1 GA 13.4 HI 45.3 IA 7.5 ID -24.7 IL 23.0 KS 2.8 KY -12.1 LA -1.8 MA 29.5 MD 29.6 ME 11.9 MI 8.9 MN 11.5 MS 0.2 NC 19.6 NE -8.6 NH 5.1 NJ 27.0 NM 20.6 NV 7.1 NY 19.4 OH 6.4 OK -12.0 OR 11.6 PA 22.1 RI 37.5 SC 0.0 SD -27.0 TN -7.3 TX 9.6 VA 22.6 WI 8.0 WV -20.4 WY -30.5";
+var $m26 = null;
+function m26(s) {
+if ($m26 === null) {
+const v = new Array(NS).fill(NaN);
+const t = M26_DATA.split(" ");
+for (let i = 0; i + 1 < t.length; i += 2) { const k = stateIdx(t[i]); if (k >= 0) v[k] = parseFloat(t[i + 1]); }
+$m26 = v;
+}
+return $m26[s];
+}
 var SENATE_2028 = [
 ["AL", "Katie Britt", "R", "-36", ""],
 ["AK", "Lisa Murkowski", "R", "-10", "independent streak"],
 ["AZ", "Mark Kelly", "D", "5", ""],
 ["AR", "John Boozman", "R", "-35", ""],
 ["CA", "Alex Padilla", "D", "22", ""],
-["CO", "Michael Bennet", "D", "15", "running for governor in 2026"],
+["CO", "Michael Bennet", "D", "15", "lost the 2026 primary for governor"],
 ["CT", "Richard Blumenthal", "D", "15", ""],
-["FL", "Ashley Moody", "R", "-16", "appointed 2025"],
+["FL", "Ashley Moody", "R", "-3", "won the 2026 special election by 3"],
 ["GA", "Raphael Warnock", "D", "3", ""],
 ["HI", "Brian Schatz", "D", "46", ""],
 ["ID", "Mike Crapo", "R", "-32", ""],
@@ -16592,7 +16615,7 @@ var SENATE_2028 = [
 ["NY", "Chuck Schumer", "D", "14", ""],
 ["NC", "Ted Budd", "R", "-3", ""],
 ["ND", "John Hoeven", "R", "-38", ""],
-["OH", "Jon Husted", "R", "-6", "appointed 2025"],
+["OH", "Sherrod Brown", "D", "5", "won the 2026 special election by 5"],
 ["OK", "James Lankford", "R", "-32", ""],
 ["OR", "Ron Wyden", "D", "15", ""],
 ["PA", "John Fetterman", "D", "5", ""],
@@ -17997,13 +18020,13 @@ rec(c, "12:0.5:Author of the Green New Deal resolution", "2:0.4:Led the 'Fightin
 appeal(c, "0:0.22 15:0.14 12:0.05 3:0.08 1:-0.08 8:-0.06 6:-0.05 17:-0.06");
 c = cand("shapiro", "Josh", "Shapiro", DEM, "Governor of Pennsylvania", "PA", 1973, F_MOD, "78 62 88 78 82 85 75 72 88 5 70 60 60 80 25 85 50 82 75 90 55", 0.50, 4.5, 5, 1.5, 0, "M 1 1 4 0.30 0 0 1.02 0.55 0 0 0.45 0.8");
 pos(c, -0.28, -0.32, "15=0.0 5=0.35");
-bio(c, "Governor of Pennsylvania since 2023 after winning by nearly 15 points; previously state attorney general. Running for re-election in November 2026.", "High approval in the ultimate swing state, a 'get stuff done' record and real crossover appeal with independents and Republicans.", "Pro-Israel record is a liability with young progressives and Arab Americans; support for school vouchers angers teachers' unions.");
+bio(c, "Governor of Pennsylvania since 2023; re-elected in November 2026 by 22 points (60-38 over Stacy Garrity) after first winning by nearly 15. Previously state attorney general.", "High approval in the ultimate swing state, a 'get stuff done' record and real crossover appeal with independents and Republicans.", "Pro-Israel record is a liability with young progressives and Arab Americans; support for school vouchers angers teachers' unions.");
 rec(c, "-1:0:Reopened I-95 in Philadelphia 12 days after its collapse", "6:0.3:Cut permitting and licensing backlogs", "11:0.3:As AG, exposed clergy abuse cover-ups", "13:0.2:Defended Pennsylvania's 2020 election in court");
 appeal(c, "17:0.15 21:0.05 24:0.05 7:0.04 18:-0.25 0:-0.05");
 c.spouse = "Lori Shapiro";
 c = cand("pritzker", "JB", "Pritzker", DEM, "Governor of Illinois", "IL", 1965, F_PROG, "62 55 78 65 75 70 55 55 80 100 60 70 55 65 30 80 40 40 75 70 85", 0.50, 3, 3, 0.8, 2500, "M 1 2 4 0.25 0 0 1.30 0.35 1 0 0.5 0.6");
 pos(c, -0.58, -0.62, null);
-bio(c, "Billionaire heir to the Hyatt fortune, governor of Illinois since 2019 and seeking a third term in 2026. Became a national figure fighting the 2025 National Guard and immigration deployments in Chicago.", "Can self-fund a whole campaign; combative anti-Trump record; a progressive governing record with balanced budgets.", "Easy to paint as an out-of-touch billionaire; average charisma on camera.");
+bio(c, "Billionaire heir to the Hyatt fortune, governor of Illinois since 2019; won a third term in November 2026 (60-37 over Darren Bailey). Became a national figure fighting the 2025 National Guard and immigration deployments in Chicago.", "Can self-fund a whole campaign; combative anti-Trump record; a progressive governing record with balanced budgets.", "Easy to paint as an out-of-touch billionaire; average charisma on camera.");
 rec(c, "3:0.4:Signed a $15 minimum wage and paid leave for all workers", "13:0.4:Fought the federal troop deployment to Chicago", "8:0.4:Made Illinois an abortion-access haven");
 appeal(c, "17:0.08 24:0.05 22:-0.04");
 c = cand("whitmer", "Gretchen", "Whitmer", DEM, "Governor of Michigan (to Jan 2027)", "MI", 1971, F_MOD, "72 60 75 72 72 70 78 70 78 5 70 55 65 75 15 82 40 65 75 80 55", 0.60, 2, 4, 1.5, 0, "F 1 2 7 0.05 0 0 0.98 0.45 0 0 0.4 0.75 E");
@@ -18019,17 +18042,17 @@ appeal(c, "22:0.12 6:0.08 8:0.08 7:0.04 0:-0.04");
 c.spouse = "Britainy Beshear";
 c = cand("moore", "Wes", "Moore", DEM, "Governor of Maryland", "MD", 1978, F_LIB, "88 70 90 72 78 72 75 70 82 10 75 65 60 80 30 65 55 60 75 80 60", 0.35, 1.5, 3, 1.0, 0, "M 5 0 1 0.05 0 0 1.0 0.6 0 0 0.35 0.8");
 pos(c, -0.42, -0.40, null);
-bio(c, "Governor of Maryland since 2023, Army combat veteran of Afghanistan, Rhodes Scholar, author and former CEO of an anti-poverty foundation. Says he is not running.", "Charismatic orator with a compelling biography; appeals across racial lines and to veterans.", "Short record; questions over a Bronze Star claim; Maryland budget troubles.");
+bio(c, "Governor of Maryland since 2023, Army combat veteran of Afghanistan, Rhodes Scholar, author and former CEO of an anti-poverty foundation. Re-elected in November 2026 (63-33 over Dan Cox). Says he is not running.", "Charismatic orator with a compelling biography; appeals across racial lines and to veterans.", "Short record; questions over a Bronze Star claim; Maryland budget troubles.");
 rec(c, "2:0.3:Signed the ENOUGH Act on child poverty", "16:0.3:Army paratrooper and captain in Afghanistan", "-1:0:Rebuilding the Key Bridge");
 appeal(c, "10:0.12 25:0.08 11:0.05");
 c.spouse = "Dawn Flythe Moore";
 c = cand("booker", "Cory", "Booker", DEM, "U.S. Senator, New Jersey", "NJ", 1969, F_LIB, "80 65 90 75 80 70 75 75 75 5 70 70 55 98 10 55 50 40 70 65 70", 0.65, 3.5, 6, 2.5, 0, "M 5 0 0 0 0 0 1.0 0.55 0 1 0.45 0.8");
-bio(c, "Senator from New Jersey since 2013 and former mayor of Newark. Set the Senate record with a 25-hour speech against the Trump administration in 2025. Ran for president in 2020.", "A tireless, inspiring speaker with deep ties to Black communities and the Senate.", "Sometimes seen as more performance than substance; 2020 campaign never caught fire.");
+bio(c, "Senator from New Jersey since 2013 and former mayor of Newark. Set the Senate record with a 25-hour speech against the Trump administration in 2025; re-elected in November 2026 (62-35). Ran for president in 2020.", "A tireless, inspiring speaker with deep ties to Black communities and the Senate.", "Sometimes seen as more performance than substance; 2020 campaign never caught fire.");
 rec(c, "13:0.3:Record 25-hour Senate speech against the administration", "11:0.3:Co-architect of the First Step Act on criminal justice", "-1:0:Mayor of Newark 2006-13");
 appeal(c, "10:0.10 11:0.04");
 c = cand("khanna", "Ro", "Khanna", DEM, "U.S. Representative, California", "CA", 1976, F_PROG, "60 80 65 72 85 70 65 70 60 15 60 65 65 75 10 15 45 40 25 40 70", 0.30, 1, 10, 1.2, 0, "M 3 0 2 0.10 0 0 0.95 0.45 0 0 0.4 0.7");
 pos(c, -0.62, -0.50, "4=0.35 1=0.0 0=0.45");
-bio(c, "Silicon Valley congressman since 2017 and co-chair of Bernie Sanders' 2020 campaign. Co-led the bipartisan push with Thomas Massie to release the Epstein files. Says he will decide after the midterms.", "A progressive who speaks tech; tireless media presence on every platform, including right-leaning podcasts.", "Low name recognition; no executive record; a House member has rarely won the nomination.");
+bio(c, "Silicon Valley congressman since 2017 and co-chair of Bernie Sanders' 2020 campaign. Co-led the bipartisan push with Thomas Massie to release the Epstein files. Says he will decide now that the midterms are over.", "A progressive who speaks tech; tireless media presence on every platform, including right-leaning podcasts.", "Low name recognition; no executive record; a House member has rarely won the nomination.");
 rec(c, "0:0.4:Co-author of the Endless Frontier bill that became the CHIPS Act", "13:0.4:Forced release of the Epstein files with Rep. Massie", "4:0.3:'Economic patriotism' plan to rebuild manufacturing");
 appeal(c, "16:0.10 0:0.08 28:0.06");
 c = cand("kelly", "Mark", "Kelly", DEM, "U.S. Senator, Arizona", "AZ", 1964, F_MOD, "65 60 62 62 82 85 70 85 75 10 65 60 80 75 10 40 85 75 70 80 60", 0.55, 3, 22, 3.0, 0, "M 1 6 0 0.8 4 0 1.0 0.6 1 1 0.75 0.6");
@@ -18048,7 +18071,7 @@ bio(c, "Senator from Connecticut since 2013 after the Sandy Hook massacre shaped
 rec(c, "14:0.6:Negotiated the Bipartisan Safer Communities Act", "16:0.3:Foreign Relations Committee leader on Ukraine", "13:0.4:Anti-corruption crusade against the administration");
 appeal(c, "0:0.04 27:0.03");
 c = cand("ossoff", "Jon", "Ossoff", DEM, "U.S. Senator, Georgia", "GA", 1987, F_LIB, "78 65 82 75 78 80 70 85 75 5 75 70 65 85 10 20 45 55 60 75 70", 0.40, 1.5, 6, 3.0, 0, "M 1 1 5 0 0 0 0.95 0.45 0 0 0.25 0.6");
-bio(c, "Senator from Georgia since 2021, the youngest member of the Senate, on the ballot again in November 2026. A former investigative documentary producer.", "Young, eloquent, battle-tested in Georgia's brutal races; a prodigious fundraiser.", "Thin legislative record; must first win re-election in 2026.");
+bio(c, "Senator from Georgia since 2021 and the youngest member of the Senate; re-elected in November 2026 by 18 points over Rep. Mike Collins, the best Democratic showing in Georgia in decades. A former investigative documentary producer.", "Young, eloquent, battle-tested in Georgia's brutal races; a prodigious fundraiser.", "Thin legislative record; just began a new six-year term.");
 rec(c, "13:0.5:Wrote the bill to ban stock trading by members of Congress", "11:0.3:Exposed abuse in federal prisons", "-1:0:Won Georgia twice");
 appeal(c, "0:0.08 10:0.06");
 c = cand("warnock", "Raphael", "Warnock", DEM, "U.S. Senator, Georgia", "GA", 1969, F_LIB, "82 60 95 75 80 85 80 80 65 0 75 55 80 75 25 15 35 55 60 75 65", 0.45, 1, 5, 2.5, 0, "M 5 0 1 0.35 4 0 1.0 0.5 0 1 0.5 0.75");
@@ -18056,7 +18079,7 @@ bio(c, "Senator from Georgia since 2021 and senior pastor of Ebenezer Baptist Ch
 rec(c, "9:0.5:Capped insulin at $35 for seniors", "-1:0:Pastor of Ebenezer Baptist Church", "-1:0:Won Georgia twice, including a 2022 runoff");
 appeal(c, "10:0.15 6:0.04 1:0.03");
 c = cand("walz", "Tim", "Walz", DEM, "Governor of Minnesota", "MN", 1964, F_PROG, "72 55 68 55 65 50 85 70 55 0 70 60 85 70 45 70 50 55 60 50 70", 0.75, 2, 1, 1.5, 0, "M 1 7 2 0.9 0 1 1.10 0.5 3 0 0.8 0.75");
-bio(c, "Governor of Minnesota since 2019, former congressman, teacher, football coach and 24-year Army National Guard veteran. Kamala Harris's 2024 running mate.", "Folksy, authentic Midwestern populist with rural roots and a progressive record.", "Weak 2024 debate performance; a sprawling Minnesota fraud scandal on his watch; gaffe-prone.");
+bio(c, "Governor of Minnesota since 2019, former congressman, teacher, football coach and 24-year Army National Guard veteran. Kamala Harris's 2024 running mate. Ended his bid for a third term in January 2026; Amy Klobuchar succeeds him in January 2027.", "Folksy, authentic Midwestern populist with rural roots and a progressive record.", "Weak 2024 debate performance; a sprawling Minnesota fraud scandal on his watch; gaffe-prone.");
 rec(c, "2:0.4:Free school meals and paid family leave in Minnesota", "16:0.2:24 years in the Army National Guard", "13:-0.3:Minnesota social-service fraud scandal");
 appeal(c, "22:0.06 8:0.05 25:0.04 26:0.03");
 c.spouse = "Gwen Walz";
@@ -18125,11 +18148,11 @@ rec(c, "3:0.5:Landed Hyundai's and Rivian's EV plants in Georgia", "-1:0:Beat St
 appeal(c, "21:0.06 22:0.05 10:0.03");
 c = cand("sanders", "Sarah", "Huckabee Sanders", REP, "Governor of Arkansas", "AR", 1982, F_MAGA, "62 55 65 65 70 78 65 65 70 0 60 55 55 75 30 65 30 35 80 75 80", 0.60, 1, 3, 1.2, 0, "F 1 1 7 0 0 0 1.0 0.5 0 0 0.3 0.6 E");
 pos(c, 0.60, 0.85, null);
-bio(c, "Governor of Arkansas since 2023 and Trump's White House press secretary 2017-19; daughter of former governor Mike Huckabee. On the ballot again in 2026.", "Trump-world credentials with a governing record; strong with evangelicals.", "Small-state profile; the lectern spending controversy; untested nationally.");
+bio(c, "Governor of Arkansas since 2023 and Trump's White House press secretary 2017-19; daughter of former governor Mike Huckabee. Re-elected in November 2026 (54-39) as Democrats swept much of the South.", "Trump-world credentials with a governing record; strong with evangelicals.", "Small-state profile; the lectern spending controversy; untested nationally.");
 rec(c, "15:0.5:Signed Arkansas LEARNS, universal school choice", "-1:0:Trump's White House press secretary");
 appeal(c, "6:0.08 29:0.03");
-c = cand("ramaswamy", "Vivek", "Ramaswamy", REP, "Republican nominee for Governor of Ohio", "OH", 1985, F_TECHR, "70 88 75 82 85 60 70 70 75 80 60 82 45 90 25 35 30 40 50 60 80", 0.65, 3, 5, 1.5, 500, "M 3 0 2 0 0 0 0.92 0.45 0 0 0.25 0.7");
-bio(c, "Biotech entrepreneur, 2024 presidential candidate and briefly co-chair of DOGE; the Trump-endorsed nominee for Ohio governor in November 2026.", "Relentless energy, podcast-native, can self-fund; popular with young men and the tech right.", "Seen as glib by older voters; thin governing record unless he wins Ohio.");
+c = cand("ramaswamy", "Vivek", "Ramaswamy", REP, "Entrepreneur; 2026 Ohio governor nominee", "OH", 1985, F_TECHR, "70 88 75 82 85 60 70 70 75 80 60 82 45 90 25 35 30 40 50 60 80", 0.65, 2, 5, 1.5, 500, "M 3 0 2 0 0 0 0.92 0.45 0 0 0.25 0.7");
+bio(c, "Biotech entrepreneur, 2024 presidential candidate and briefly co-chair of DOGE; lost the November 2026 race for Ohio governor to Democrat Amy Acton by 8 points (52-44) in a state Trump carried by 11.", "Relentless energy, podcast-native, can self-fund; popular with young men and the tech right.", "Seen as glib by older voters; no governing record, and an 8-point loss in Ohio in 2026.");
 rec(c, "-1:0:Founded Roivant Sciences", "2:0.2:Co-chaired DOGE at its launch", "15:0.3:Champion of merit-based education");
 appeal(c, "16:0.08 2:0.08 1:-0.06");
 c = cand("carlson", "Tucker", "Carlson", REP, "Media personality", "FL", 1969, F_RESTR, "78 95 70 70 75 55 50 80 55 25 70 90 70 70 55 10 30 25 25 30 90", 0.80, 3, 2, 3.0, 40, "M 1 4 11 0.45 0 0 1.0 0.5 3 0 0.6 0.4");
@@ -18443,13 +18466,13 @@ var SC_BOOM = 4;
 var SC_THIRD = 5;
 var NSCEN = 6;
 var SCEN_NAME = ["Baseline 2028", "The Scandal", "War in the Pacific", "The AI Recession", "Boom Times", "Third Force"];
-var SCEN_TAG = ["Projected from the 2026 midterms", "Corruption craters the president's approval", "America is at war with China", "AI layoffs tip the economy into recession", "Strong growth and falling prices", "A billionaire-backed independent surges"];
-var SCEN_DESC = ["Democrats ride a midterm wave in November 2026 on cost-of-living anger and a president with approval in the high 30s. History says midterm waves fade - the party that loses a midterm often wins the next presidential race, but not always (1994, 2010 and 2018 were followed by mixed results). No incumbent is on the ballot. Begins near D+2 nationally with wide uncertainty.", "A sprawling corruption scandal - pardons for sale, crypto self-dealing, a cabinet resignation - drives the president's approval into the low 30s. Republicans must choose between loyalty and distance. Democracy and corruption become top-tier issues. Starts near D+6.", "A US-China war over Taiwan breaks out in spring 2027. A brief rally-round-the-flag effect gives way to casualties, shortages, a stock crash and draft fears. Foreign-policy credibility matters as never before; restrainers and hawks fight for the GOP soul.", "Agentic AI wipes out entry-level white-collar jobs. Unemployment climbs past 7%, data-center power demand sends electricity bills soaring and voters turn on the tech industry. AI and jobs become top issues; the party in power is blamed.", "Productivity gains from AI, falling inflation and a stock-market boom lift the economy; the president's approval climbs toward 50%. A tough year for the out-party: Democrats must offer more than opposition. Starts near R+2.", "Fed up with both parties, a billionaire funds the America Party and a fictional tech founder, Reid Callahan, polls in the high teens. Every state becomes a three-way race, and 270 is harder to reach."];
-var SCEN_SHORT = ["Democrats ride a midterm wave against a president in the high 30s. History says waves fade - but not always. The fundamentals lean slightly Democratic.", "Pardons for sale and crypto self-dealing push the president's approval into the low 30s. Corruption becomes a top issue; Republicans must choose loyalty or distance.", "War over Taiwan in spring 2027: a brief rally effect, then casualties, shortages and draft fears. Commander-in-chief credibility matters as never before.", "AI agents wipe out entry-level white-collar jobs. Unemployment passes 7%, power bills soar near data centers, and the party in power is blamed.", "AI productivity, falling inflation and a stock boom lift the president toward 50%. A tough year for the out-party: opposition alone won't do.", "A billionaire-funded America Party ticket polls in the high teens. Every state becomes a three-way race and 270 gets harder to reach."];
-var SCEN_START = [[2.0, 38, 4.6, 2.9, 1.6], [6.0, 32, 4.8, 3.1, 1.2], [1.0, 44, 5.4, 4.5, 0.4], [5.0, 37, 7.2, 2.6, -1.4], [-2.0, 49, 3.8, 2.0, 3.4], [2.0, 38, 4.6, 2.9, 1.6]];
-var MID_HOUSE_D = 236;
-var MID_SENATE_D = 50;
-var MID_GENERIC = 7.0;
+var SCEN_TAG = ["After the 2026 Democratic landslide", "Corruption craters the president's approval", "America is at war with China", "AI layoffs tip the economy into recession", "Strong growth and falling prices", "A billionaire-backed independent surges"];
+var SCEN_DESC = ["Democrats won the November 2026 midterms in a landslide: the House popular vote by about 13 points (the biggest midterm margin since 1974), some 255 House seats, the Senate and most governorships, on cost-of-living anger and a president at 37% approval. History says midterm waves fade - the party that loses a midterm often wins the next presidential race, but not always (1994, 2010 and 2018 were followed by mixed results). No incumbent is on the ballot. Begins near D+3 nationally with wide uncertainty.", "A sprawling corruption scandal - pardons for sale, crypto self-dealing, a cabinet resignation - drives the president's approval into the low 30s. Republicans must choose between loyalty and distance. Democracy and corruption become top-tier issues. Starts near D+6.", "A US-China war over Taiwan breaks out in spring 2027. A brief rally-round-the-flag effect gives way to casualties, shortages, a stock crash and draft fears. Foreign-policy credibility matters as never before; restrainers and hawks fight for the GOP soul.", "Agentic AI wipes out entry-level white-collar jobs. Unemployment climbs past 7%, data-center power demand sends electricity bills soaring and voters turn on the tech industry. AI and jobs become top issues; the party in power is blamed.", "Productivity gains from AI, falling inflation and a stock-market boom lift the economy; the president's approval climbs toward 50%. A tough year for the out-party: Democrats must offer more than opposition. Starts near R+2.", "Fed up with both parties, a billionaire funds the America Party and a fictional tech founder, Reid Callahan, polls in the high teens. Every state becomes a three-way race, and 270 is harder to reach."];
+var SCEN_SHORT = ["Democrats won the 2026 midterms by 13 points against a president at 37%. History says waves fade - but not always. The fundamentals lean Democratic.", "Pardons for sale and crypto self-dealing push the president's approval into the low 30s. Corruption becomes a top issue; Republicans must choose loyalty or distance.", "War over Taiwan in spring 2027: a brief rally effect, then casualties, shortages and draft fears. Commander-in-chief credibility matters as never before.", "AI agents wipe out entry-level white-collar jobs. Unemployment passes 7%, power bills soar near data centers, and the party in power is blamed.", "AI productivity, falling inflation and a stock boom lift the president toward 50%. A tough year for the out-party: opposition alone won't do.", "A billionaire-funded America Party ticket polls in the high teens. Every state becomes a three-way race and 270 gets harder to reach."];
+var SCEN_START = [[2.0, 37, 4.6, 2.9, 1.6], [6.0, 32, 4.8, 3.1, 1.2], [1.0, 44, 5.4, 4.5, 0.4], [5.0, 37, 7.2, 2.6, -1.4], [-2.0, 49, 3.8, 2.0, 3.4], [2.0, 37, 4.6, 2.9, 1.6]];
+var MID_HOUSE_D = 255;
+var MID_SENATE_D = 54;
+var MID_GENERIC = 13.0;
 var POLL_METHOD = ["Online panel", "Text-to-web", "Live phone + text"];
 var POLL_COST_PER = [28, 45, 95];
 var POLL_QUALITY = [0.65, 0.85, 1.0];
@@ -19088,7 +19111,7 @@ Briefing.TEXT = [
 ["Internal polls cost money; bigger samples and better methods (live phone plus text) are more accurate. Every internal poll includes crosstabs for up to thirty voter groups (too-small groups are not reported). Public polls appear on their own each week, mostly in competitive states; they have house effects - and this cycle, like every cycle, the polls may share a systematic error.", "#The map views", "Spending: your recent spending per state (deeper green = deeper investment).  Internal polls: your own polling - blue and red by who leads, faint when the poll is old or small, hatched where you have none.  Public polls: the press's averages.  Volunteers & doors: shifts this week (colour) and doors knocked to date (labels).  Primary calendar: results and upcoming dates.  Ballot access (independents): where you qualify.", "#Your pollster and the issues", "Set your pollster to light, standard or heavy (Polls tab) and polls arrive on their own. The Issues view shows the most important problem by state and group, whom voters trust to handle each issue, how many agree with your positions, and how those numbers have moved."],
 ["Democrats award delegates proportionally to candidates above 15% in each state (statewide and by district); this game models the statewide split. Their 2028 early window, adopted by the DNC in August 2026, runs South Carolina (Jan 22), Nevada, New Hampshire, New Mexico, Michigan and Virginia (Feb 29); you can change it before you start. Republicans begin in Iowa, New Hampshire, Nevada and South Carolina; after mid-March many Republican contests are winner-take-all or winner-take-most.", "Two years out, primary polls mostly measure name recognition; as voters tune in, skill, money and organisation take over. Winning - and beating expectations - creates momentum: money, press and voters follow. Candidates with no money and no path drop out: most of their voters move to the rival closest to them politically. If you're still in the race you can bid for the departing candidate's endorsement with policy promises, a cabinet post, the vice-presidential slot or a convention speech - and your rivals bid too. A majority of all delegates clinches the nomination; if no one has one by the convention, it goes to a second ballot.", "The sitting president is term-limited and is never a candidate, but his endorsement in the Republican primary is the most valuable prize in politics."],
 ["You can run as an independent with a candidate you create, in any scenario (it's easiest when a third force is already stirring). Start on Labor Day already on every ballot, or start the long campaign when the primaries begin and earn your ballot lines state by state.", "#Ballot access", "Each state sets its own signature requirement and filing deadline (2024 rules): from a few hundred signatures to well over a hundred thousand, due anywhere from spring to late summer. About three in four raw signatures survive challenges; the major parties sue to strike more. Paid circulators cost about $13 a signature, volunteers and organisers gather them for free. Miss a deadline and you can only be a write-in there.", "#Getting heard", "Independents start unknown and without a party's donors. Name recognition, viral moments and podcasts matter even more. Reach 15% in the national polls to make the fall debates.", "#Winning", "270 electoral votes wins outright. If no one reaches 270, the new House picks the president, one vote per state delegation - and the game estimates the House results to decide it."],
-["Every state's electorate is modelled as 96 cells: 16 religious, racial and educational blocs (white evangelicals with and without degrees, white Catholics, other whites by education, Jewish, Latter-day Saint, Black, Mexican-American and other Hispanic, Cuban and Venezuelan, Puerto Rican and Dominican, Asian American, Native American, Arab and Muslim American, multiracial) times three age groups times two sexes. Overlays add rural/suburban/urban, union, veteran, gun-owning, LGBTQ, student and parent shares.", "Each cell's 2024 lean is calibrated so the model reproduces every state's 2024 result and the national exit-poll and validated-voter estimates for each group; 2020, 2022 and 2026 data shape trends and turnout. Composition is projected to 2028 (an older, more diverse, more college-educated electorate).", "Voters weigh 18 issues with group-specific views and salience: young voters care more about housing, student debt and Gaza; seniors about Social Security and Medicare; Arab and Muslim Americans about Israel above almost anything; evangelicals about abortion and gender; union households about trade and jobs. Candidates' ratings, records, platforms and group appeal, the national environment (approval, the economy) and every campaign's ads, visits and field work move each cell.", "Ratings are the game's estimates from public records - election results, fundraising, debate and interview reviews - not facts. Nothing in the game quotes a real person, and every event in a game is fiction."],
+["Every state's electorate is modelled as 96 cells: 16 religious, racial and educational blocs (white evangelicals with and without degrees, white Catholics, other whites by education, Jewish, Latter-day Saint, Black, Mexican-American and other Hispanic, Cuban and Venezuelan, Puerto Rican and Dominican, Asian American, Native American, Arab and Muslim American, multiracial) times three age groups times two sexes. Overlays add rural/suburban/urban, union, veteran, gun-owning, LGBTQ, student and parent shares.", "Each cell's 2024 lean is calibrated so the model reproduces every state's 2024 result and the national exit-poll and validated-voter estimates for each group; 2020, 2022 and the 2026 midterm results shape trends and turnout. Composition is projected to 2028 (an older, more diverse, more college-educated electorate).", "Voters weigh 18 issues with group-specific views and salience: young voters care more about housing, student debt and Gaza; seniors about Social Security and Medicare; Arab and Muslim Americans about Israel above almost anything; evangelicals about abortion and gender; union households about trade and jobs. Candidates' ratings, records, platforms and group appeal, the national environment (approval, the economy) and every campaign's ads, visits and field work move each cell.", "Ratings are the game's estimates from public records - election results, fundraising, debate and interview reviews - not facts. Nothing in the game quotes a real person, and every event in a game is fiction."],
 [
 "Election results: county and state returns for 2016, 2020 and 2024 (tonmcg/US_County_Level_Election_Results; MIT Election Data and Science Lab). 2022 House popular vote by state (Cook Political Report).",
 "Demographics: American Community Survey county data (via MIT Election Lab's election-context file); religion (PRRI American Values Atlas); union households (BLS Union Members 2024); veterans (VA); gun ownership (RAND state estimates); LGBTQ identification (Gallup, Williams Institute).",
@@ -19096,7 +19119,7 @@ Briefing.TEXT = [
 "Map: us-atlas (Census Bureau cartographic boundaries, Albers USA projection).",
 "Ballot access: signature requirements from the National Association of Secretaries of State (2024) and 2024 independent filing deadlines. Social media audiences by age: Pew Research Center (2024). Podcast audiences: the game's rough estimates from public view counts. Most important problem: modelled on Gallup's monthly question.",
 "TV markets: Nielsen DMA household estimates 2024-25; cost per point and political ad pricing patterns from AdImpact's 2024 cycle reporting. Digital CPMs: industry averages.",
-"2026 polling: Silver Bulletin generic-ballot average (D+8.7) and presidential approval (37.4%) as of October 28, 2026; 2028 primary polling from public national surveys (Emerson, Echelon Insights, YouGov, Atlas Intel and others).",
+"2026 results: the House, Senate and governor races as counted on November 5, 2026 (Fox News, CBS News and NBC News race calls; Yahoo News national tallies and exit polls); state-by-state 2026 Senate and governor margins feed each state's lean. Before the vote: Silver Bulletin generic-ballot average (D+8.7) and approval (37.4%) as of October 28, 2026; 2028 primary polling from public national surveys (Emerson, Echelon Insights, YouGov, Atlas Intel and others).",
 "Calendar and rules: the 2028 Democratic early-state calendar adopted by the DNC on August 15, 2026; RNC 2028 convention in Houston; DNC and RNC delegate-selection rules.",
 "Money and field: FEC filings for the 2024 presidential committees; published 2024 field-office counts; Green and Gerber, Get Out the Vote; Kalla and Broockman (2018) on persuasion.",
 "All numbers are rounded approximations for play. The game is not affiliated with any campaign, party or person."]];
@@ -19234,7 +19257,7 @@ function $boot() {
     });
     window.addEventListener('keyup', e => { if (code0(e) !== undefined) p.keyReleased(new KeyEventW(code0(e), 0)); });
     function code0(e) { return KEYS[e.key] !== undefined ? KEYS[e.key] : (e.key.length === 1 ? e.key.toUpperCase().charCodeAt(0) : undefined); }
-    window.__bg = { get app() { return APP; }, Tutorial, Screens, Hq, Night, Results, Week, Setup, Settings, candById, DebateView, Debates, Tabs, Creator, FieldScreen, Deals, Polls, Loading, SaveGame, Primary, Endorse };
+    window.__bg = { get app() { return APP; }, Tutorial, Elect, Screens, Hq, Night, Results, Week, Setup, Settings, candById, DebateView, Debates, Tabs, Creator, FieldScreen, Deals, Polls, Loading, SaveGame, Primary, Endorse };
     canvas.focus();
     resize();
     requestAnimationFrame(frame);

@@ -52,7 +52,7 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
 - **Build your own candidate**, either with a point-buy system or in an unlimited "god mode".
 - **Third parties** you can switch on: Jill Stein (Green), Andrew Yang (Forward), a fictional Libertarian and a fictional America Party candidate.
 - **Scenarios**:
-  - A baseline projected from the 2026 midterms, with a forecast you can edit
+  - A baseline built on the 2026 midterm results (as of November 5, 2026), which you can edit
   - A corruption scandal that craters the president's approval
   - War with China over Taiwan
   - An AI-driven recession
@@ -84,7 +84,7 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
 
 ## How the simulation works
 
-Each state's electorate is modelled as 96 cells: 16 religious, racial and educational blocs × 3 age groups × 2 sexes. Further layers add urban and rural, union, veteran, gun-owning, LGBTQ, student and parent shares. The cells are calibrated so the model reproduces every state's 2024 result and the national validated-voter and exit-poll numbers for each group. Results from 2020 and 2022 and the 2026 environment shape trends and turnout. Voters weigh 18 issues with group-specific views and intensity. Candidate ratings, the national mood, and every campaign's ads, visits and field work then move each cell.
+Each state's electorate is modelled as 96 cells: 16 religious, racial and educational blocs × 3 age groups × 2 sexes. Further layers add urban and rural, union, veteran, gun-owning, LGBTQ, student and parent shares. The cells are calibrated so the model reproduces every state's 2024 result and the national validated-voter and exit-poll numbers for each group. Results from 2020 and 2022, and each state's Senate and governor margins in the 2026 midterms, shape trends and turnout. Voters weigh 18 issues with group-specific views and intensity. Candidate ratings, the national mood, and every campaign's ads, visits and field work then move each cell.
 
 ## Notes
 
@@ -98,6 +98,7 @@ Each state's electorate is modelled as 96 cells: 16 religious, racial and educat
 - Election returns: [tonmcg/US_County_Level_Election_Results_08-24](https://github.com/tonmcg/US_County_Level_Election_Results_08-24), [MIT Election Data and Science Lab](https://electionlab.mit.edu/data)
 - How groups voted in 2024: [Pew Research Center validated voters](https://www.pewresearch.org/politics/2025/06/26/behind-trumps-2024-victory-a-more-racially-and-ethnically-diverse-voter-coalition/), AP VoteCast, national exit polls
 - The 2026 environment: [Silver Bulletin generic ballot](https://www.natesilver.net/p/generic-ballot-average-2026-nate-silver-bulletin-congress-polls) and [presidential approval](https://www.natesilver.net/p/trump-approval-ratings-nate-silver-bulletin) averages (October 2026)
+- 2026 midterm results (as of November 5, 2026; Alaska and Mississippi Senate races and some House seats still counting): [270toWin live results](https://www.270towin.com/2026-election-results-live/) (Decision Desk HQ calls), CBS News and Fox News results pages
 - 2028 Democratic calendar: adopted by the DNC on August 15, 2026 ([Washington Examiner](https://www.washingtonexaminer.com/?p=4685985))
 - Map: [us-atlas](https://github.com/topojson/us-atlas) (Census Bureau boundaries)
 - TV markets and ad pricing: Nielsen DMA estimates; AdImpact 2024 cycle reporting
