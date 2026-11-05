@@ -39,6 +39,9 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
   - play turns of one, two or four weeks
   - add a third party of your own design: name, candidate, ideology, home state and strength
 - **Start on July 15** as the presumptive nominee, with the conventions still ahead.
+- **Primaries only:** play just the fight for the nomination. If no one wins a majority, you work a contested convention ballot by ballot: offer the vice-presidential slot, cabinet posts or platform deals, lobby the party leaders and rally the floor. Win and you can play on into the general.
+- **Three roles.** Play the candidate, or be the **campaign manager**: you run everything, but the candidate can refuse events, go off script and, if trust runs out, fire you. Or **watch the race** with pause, slow, normal and fast speeds and a skip to Election Night.
+- **Run 100 elections** under your settings, general elections or full campaigns, and see each party's chances, the spread of electoral votes, how often each state flipped, the usual tipping-point state and who the nominees were.
 - **Your convention:** pick the platform's three priorities and settle two platform fights, choose four primetime speakers, and write your acceptance speech (opening, core argument, close). How well it plays sets your bounce.
 - **Press conferences** at a few big moments: the first votes, Super Tuesday, clinching, your convention, the first debate and the final weeks. Answer on substance, pivot, hit back or laugh it off.
 - **Scandals play out over weeks.** Apologise, deny, counterattack or wait it out. Each choice has its own consequences, including documents that surface later.
@@ -52,6 +55,7 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
 - **Election night by county:** watch all 3,100 counties report, with anchors calling states, flagging red mirages and checking in on the big counties.
 - **New faces from the midterms:** James Talarico, Roy Cooper, Sherrod Brown and Amy Klobuchar join the Democratic field, and the opening primary polls are updated to the late-2026 averages.
 - **The 2026 midterm results** feed the model: each state's Senate and governor margins, about 255 Democratic House seats, 54 Democratic senators and a D+13 national House vote.
+- **A late swing on Election Day:** a small national and state-by-state shift that no poll sees coming, so close states can go either way.
 - The browser version is now generated from the Java source, so the two always play the same game.
 
 ## What's new in version 2

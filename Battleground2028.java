@@ -1937,6 +1937,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         int myPartyFaction = F_FWD, myPartyHome = stateIdx("OH"), myPartyLook;
         double myPartyStrength = 0.45;
         boolean advisor = true;                         // the chief of staff's weekly advice
+        boolean primaryOnly;                            // the game ends when your party picks its nominee
+        int role;                                       // play the candidate, manage the campaign, or watch
 
         String lockOf(int party) { return party == DEM ? lockD : party == REP ? lockR : null; }
     }
@@ -2093,6 +2095,9 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         boolean attackedOnAir;
         boolean[] senJoint = new boolean[NS];
         int[] vpStops, vpActs;
+        // campaign-manager mode: how much the candidate trusts you
+        double trust = 0.6, lastPoll = Double.NaN;
+        boolean mgrWarned, fired;
         Camp(Cand c, int idx) {
             this.c = c; this.idx = idx; party = c.party;
             plat = c.plat.clone();
@@ -2215,6 +2220,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         double[] oddsHist;                              // the forecast's chance for the Democrat, by week
         double startEnv;                                // the national environment when the game began
         boolean recorded;                               // added to the hall of fame
+        int contestPending = -1;                        // the party whose contested convention the player is about to play
+        int resumePhase = PH_PRIMARY;                   // primaries only: the phase to go back to if the player plays on
         double dApp, dUnemp, dInfl, dGdp, dRight;       // custom conditions: offsets from the scenario's path
         double[][] cellAdj, turnAdj;                    // custom conditions: logit shifts and turnout multipliers per state and cell
 
@@ -3427,6 +3434,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             if (plan) for (Camp k : g.camps) if (!k.human && (contestant(g, k) || k.party == IND && k.active)) AI.decide(g, k);
             Camp me = g.me();
             if (plan && me != null && me.active) Staff.automate(g, me);
+            if (plan && me != null && me.active) Manager.week(g, me);
             for (Camp k : g.camps) if (contestant(g, k) || (k.party >= GRN && k.active && g.phase >= PH_CONVENTION) || (k.party == IND && k.active)) campaign(g, k);
             Message.resolve(g);
             World.week(g);
@@ -4538,6 +4546,12 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 case EV_STAFF:
                     Staffers.poachDecision(g, k, opt);
                     break;
+                case EV_MANAGER:
+                    Manager.decide(g, k, opt);
+                    break;
+                case EV_CONTESTED:                      // not played out: the party decides
+                    if (g.contestPending >= 0) { int cp = g.contestPending; g.contestPending = -1; Primary.nominate(g, Primary.contested(g, cp), true); }
+                    break;
                 case EV_HEALTHSCARE:
                     if (opt == 0) { k.favor += 0.004; }
                     if (opt == 1) { if (g.rng.nextDouble() < 0.3) { k.favor -= 0.02; g.log(NK_BAD, "Reports contradict " + who + "'s account of the health scare."); } }
@@ -4937,8 +4951,19 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 boolean majority = lead != null && lead.delegates >= needed(g, party);
                 boolean decided = lead != null && remaining(g, party) == 0 && g.week >= (party == REP ? RNC_WEEK : DNC_WEEK);
                 if (lead != null && (majority || alone)) nominate(g, lead, false);
-                else if (decided) nominate(g, contested(g, party), true);
+                else if (decided) contestedOrPlay(g, party);
             }
+        }
+
+        /** A contested convention: the player plays it out if they're a contender; otherwise the party decides. */
+        static void contestedOrPlay(Game g, int party) {
+            if (g.contestPending == party) return;
+            if (Contested.playable(g, party)) {
+                g.contestPending = party;
+                g.pending.add(new Object[]{EV_CONTESTED, "Contested convention", "", new String[0], party});
+                return;
+            }
+            nominate(g, contested(g, party), true);
         }
 
         static Camp contested(Game g, int party) {
@@ -5045,8 +5070,21 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 }
             }
             if (g.phase == PH_PRIMARY && g.week >= RNC_WEEK && (g.dNom < 0 || g.rNom < 0)) {
-                for (int p = DEM; p <= REP; p++) if (g.nominee(p) == null && !g.party(p).isEmpty()) nominate(g, contested(g, p), true);
+                for (int p = DEM; p <= REP; p++) if (g.nominee(p) == null && !g.party(p).isEmpty()) contestedOrPlay(g, p);
             }
+            nominationOver(g);
+        }
+
+        /** Primaries only: the game ends when the player's party has its nominee. */
+        static boolean nominationOver(Game g) {
+            Camp pm = g.me();
+            if (g.set.primaryOnly && pm != null && pm.party <= REP && g.nominee(pm.party) != null && g.phase != PH_OVER && !g.spectator) {
+                g.resumePhase = g.phase;
+                g.phase = PH_OVER;
+                g.log(NK_BIG, pm.nominee ? "YOU HAVE WON THE " + PARTY[pm.party].toUpperCase() + " NOMINATION." : g.nominee(pm.party).name() + " has won the " + PARTY[pm.party] + " nomination.");
+                return true;
+            }
+            return false;
         }
 
         static void convention(Game g, int party) {
@@ -5302,9 +5340,12 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             g.result = new double[NS][4];
             double[] m = new double[NS];
             g.popD = g.popR = g.popO = g.popI = 0;
+            // the late swing and turnout surprises no poll or campaign sees coming (its own random stream, so nothing else moves)
+            Random late = new Random(g.set.seed * 31 + 7);
+            double lateNat = late.nextGaussian() * 1.0;
             for (int s = 0; s < NS; s++) {
                 double f = bankedFrac(g, s, t);
-                double noise = g.rng.nextGaussian() * 0.6;
+                double noise = g.rng.nextGaussian() * 0.6 + (lateNat + late.nextGaussian() * 1.2) * (1 - f);
                 for (int j = 0; j < 3; j++) g.result[s][j] = g.banked[s][j] + t[s][j] * (1 - f);
                 double bi = g.banked[s].length > 3 ? g.banked[s][3] : 0;
                 g.result[s][3] = bi + t[s][4] * (1 - f);
@@ -7133,7 +7174,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
     // =====================================================================
     static final int SC_HOME = 0, SC_SETUP = 1, SC_PICK = 2, SC_CREATE = 3, SC_HQ = 4, SC_DEBATE = 5, SC_NIGHT = 6,
             SC_END = 7, SC_BRIEF = 8, SC_VP = 9, SC_NEGOT = 10, SC_PLATFORM = 11, SC_FIELD = 12, SC_LOADING = 13, SC_RESULTS = 14, SC_CUSTOM = 15,
-            SC_CONVENTION = 16, SC_STAFF = 17, SC_ADS = 18, SC_FORECAST = 19, SC_HALL = 20;
+            SC_CONVENTION = 16, SC_STAFF = 17, SC_ADS = 18, SC_FORECAST = 19, SC_HALL = 20, SC_CONTEST = 21, SC_BATCH = 22;
 
     static final String SANS = pickFont(new String[]{"Inter", "Segoe UI", "Helvetica Neue", "SF Pro Text", "Roboto", "Noto Sans",
             "Open Sans", "Lato", "DejaVu Sans", "Liberation Sans", "Arial"}, "SansSerif");
@@ -7314,6 +7355,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         if (screen == SC_NIGHT && game != null) Night.update(this, dt);
         if (screen == SC_DEBATE) DebateView.update(this, dt);
         if (screen == SC_LOADING) Loading.update(this);
+        if (screen == SC_BATCH) Batch.update(this);
         USMap.animate(dt);
         for (double[] s : scrolls.values()) if (s.length > 6) s[4] += (s[6] - s[4]) * Math.min(1, dt * 14);
     }
@@ -7368,6 +7410,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 case SC_ADS: AdStudio.draw(this, g); break;
                 case SC_FORECAST: Forecast.draw(this, g); break;
                 case SC_HALL: Legacy.draw(this, g); break;
+                case SC_CONTEST: Contested.draw(this, g); break;
+                case SC_BATCH: Batch.draw(this, g); break;
                 default: break;
             }
         } catch (RuntimeException ex) {
@@ -9337,50 +9381,65 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             u.panel(g, ax, ay, aw, 690, "How you play");
             double y = ay + 44;
             text(g, "Mode", ax + 18, y, F_H3, C_TEXT);
-            final int[] modeOf = {MODE_FULL, MODE_SUMMER, MODE_GENERAL};
-            int mi = 0;
-            for (int i = 0; i < modeOf.length; i++) if (modeOf[i] == s.mode) mi = i;
-            u.segmented(g, ax + 18, y + 10, aw - 36, 36, new String[]{"Full campaign", "From July 15", "From Labor Day"}, mi, i -> s.mode = modeOf[i],
-                    new String[]{"From the week after the 2026 midterms to Election Night.", "Start as the presumptive nominee, just before the conventions.", "Start as the nominee on Labor Day 2028."});
-            y += 56;
-            wrap(g, s.mode == MODE_FULL ? "Start on November 9, 2026, the week after the midterms. Build a campaign through the invisible primary, survive the debates and primaries, win the nomination and then the general. (2-4 hours)"
-                    : s.mode == MODE_SUMMER ? "Start on July 15, 2028 as your party's presumptive nominee, just before the conventions. Pick a running mate, plan your convention (the platform's priorities, the speakers, your acceptance speech), then fight for 270. (60-90 minutes)"
-                    : "Start on Labor Day 2028 as your party's nominee against a chosen opponent. Pick a running mate, negotiate debates and fight for 270. (45-75 minutes)", ax + 18, y + 14, aw - 36, F_XS, C_DIM);
-            y += 62;
-            text(g, "Difficulty", ax + 18, y, F_H3, C_TEXT);
-            u.segmented(g, ax + 18, y + 10, aw - 36, 32, new String[]{"Easy", "Normal", "Hard"}, s.difficulty, i -> s.difficulty = i, null);
-            y += 50;
+            int mi = s.mode == MODE_SUMMER ? 2 : s.mode == MODE_GENERAL ? 3 : s.primaryOnly ? 1 : 0;
+            u.segmented(g, ax + 18, y + 10, aw - 36, 34, new String[]{"Full campaign", "Primaries only", "From July 15", "From Labor Day"}, mi, i -> {
+                s.mode = i == 2 ? MODE_SUMMER : i == 3 ? MODE_GENERAL : MODE_FULL;
+                s.primaryOnly = i == 1;
+            }, new String[]{"From the week after the 2026 midterms to Election Night.", "Just the fight for the nomination, scored on delegates.",
+                    "Start as the presumptive nominee, just before the conventions.", "Start as the nominee on Labor Day 2028."});
+            String[] md = {"Start on November 9, 2026. Build a campaign through the invisible primary, the debates and the primaries, win the nomination and then the general. (2-4 hours)",
+                    "The nomination only, from November 2026: the game ends when your party has its nominee, with a contested convention if no one wins a majority. (1-2 hours)",
+                    "Start on July 15, 2028 as the presumptive nominee: pick a running mate, plan your convention, then fight for 270. (60-90 minutes)",
+                    "Start on Labor Day 2028 as your party's nominee against a chosen opponent. Pick a running mate, negotiate debates and fight for 270. (45-75 minutes)"};
+            wrap(g, md[mi], ax + 18, y + 60, aw - 36, F_XS, C_DIM);
+            y += 100;
+            text(g, "Your role", ax + 18, y, F_H3, C_TEXT);
+            u.segmented(g, ax + 18, y + 10, aw - 36, 30, new String[]{"The candidate", "Campaign manager", "Watch the race"}, clampi(s.role, 0, 2), i -> s.role = i,
+                    new String[]{"You are the candidate: every decision is yours.", "You run the campaign, but the candidate has a mind of their own.", "Sit back and watch the computer play the race."});
+            String[] rd = {"Every decision is yours.", "You run the campaign; the candidate can refuse events, go off script, and fire you if trust runs out.",
+                    "The computer plays every campaign. Pause, speed up or skip ahead - or run 100 elections at once."};
+            wrap(g, rd[clampi(s.role, 0, 2)], ax + 18, y + 54, aw - 36, F_XS, C_DIM);
+            y += 74;
+            if (s.role == ROLE_WATCH) {
+                u.button(g, ax + 18, y, (aw - 46) / 2, 28, "Run 100: general elections", B_PRIMARY, () -> Batch.start(u, MODE_GENERAL),
+                        "100 general elections between your chosen candidate and the opponent on the next screen's defaults, under these settings. About a minute.");
+                u.button(g, ax + 28 + (aw - 46) / 2, y, (aw - 46) / 2, 28, "Run 100: full campaigns", B_NORM, () -> Batch.start(u, MODE_FULL),
+                        "100 complete races, primaries and all. Slow: 10 to 20 minutes.");
+                y += 40;
+            }
+            text(g, "Difficulty", ax + 18, y + 20, F_H3, C_TEXT);
+            u.segmented(g, ax + 110, y, aw - 128, 30, new String[]{"Easy", "Normal", "Hard"}, s.difficulty, i -> s.difficulty = i, null);
             String[] dd = {"Opponents are slower to adapt; your money stretches further; fewer nasty surprises.", "The race as it is: smart opponents, realistic costs.", "Opponents fight harder, donors are stingier, and scandals bite."};
-            wrap(g, dd[s.difficulty], ax + 18, y + 12, aw - 36, F_XS, C_DIM);
-            y += 40;
-            text(g, "Events", ax + 18, y, F_H3, C_TEXT);
-            u.slider(g, ax + 18, y + 22, aw - 36, (s.eventRate - 0.5) / 0.5, C_ACCENT, v -> s.eventRate = 0.5 + 0.5 * v, "How often the world intervenes: crises, scandals, gaffes and viral moments.");
-            text(g, "Rare", ax + 18, y + 44, F_T, C_DIM);
-            textR(g, "Realistic", ax + aw - 18, y + 44, F_T, C_DIM);
-            y += 66;
+            wrap(g, dd[s.difficulty], ax + 18, y + 46, aw - 36, F_XS, C_DIM);
+            y += 64;
+            text(g, "Events", ax + 18, y + 16, F_H3, C_TEXT);
+            u.slider(g, ax + 110, y + 12, aw - 128, (s.eventRate - 0.5) / 0.5, C_ACCENT, v -> s.eventRate = 0.5 + 0.5 * v, "How often the world intervenes: crises, scandals, gaffes and viral moments.");
+            text(g, "Rare", ax + 110, y + 34, F_T, C_DIM);
+            textR(g, "Realistic", ax + aw - 18, y + 34, F_T, C_DIM);
+            y += 58;
             text(g, "Third parties in the general election", ax + 18, y, F_H3, C_TEXT);
-            String[] tp = {"Green Party - Jill Stein", "Libertarian Party - Dana Whitfield (fictional)", "Forward Party - Andrew Yang", "America Party - Reid Callahan (fictional)"};
+            String[] tp = {"Green - Jill Stein", "Libertarian - Dana Whitfield", "Forward - Andrew Yang", "America Party - Reid Callahan"};
             for (int i = 0; i < 4; i++) {
                 final int k = i;
-                double ry = y + 14 + i * 30;
-                u.toggle(g, ax + 18, ry, s.third[i], () -> s.third[k] = !s.third[k], null);
-                text(g, tp[i], ax + 64, ry + 15, F_S, s.third[i] ? C_TEXT : C_DIM);
+                double rx = ax + 18 + (i % 2) * 222, ry = y + 12 + (i / 2) * 26;
+                u.toggle(g, rx, ry, s.third[i], () -> s.third[k] = !s.third[k], i == 1 || i == 3 ? "A fictional candidate." : null);
+                text(g, tp[i], rx + 44, ry + 15, F_S, s.third[i] ? C_TEXT : C_DIM);
             }
-            y += 140;
+            y += 76;
             text(g, "Start with staff running", ax + 18, y, F_H3, C_TEXT);
-            text(g, "You can hand any of these to your staff at any time.", ax + 18, y + 16, F_T, C_DIM);
+            text(g, "You can hand any of these to your staff at any time.", ax + 200, y, F_T, C_DIM);
             for (int i = 0; i < Staff.AREA.length; i++) {
                 final int k = i;
-                double rx = ax + 18 + (i % 3) * 145, ry = y + 28 + (i / 3) * 28;
+                double rx = ax + 18 + (i % 3) * 145, ry = y + 12 + (i / 3) * 26;
                 u.toggle(g, rx, ry, s.staff[i], () -> s.staff[k] = !s.staff[k], null);
                 text(g, Staff.AREA[i], rx + 44, ry + 15, F_S, s.staff[i] ? C_TEXT : C_DIM);
             }
-            y += 96;
+            y += 80;
             text(g, "Guided tutorial", ax + 18, y, F_H3, C_TEXT);
             u.toggle(g, ax + aw - 18 - 36, y - 14, s.tutorial, () -> { s.tutorial = !s.tutorial; if (s.tutorial) { s.tourDone = false; if (s.tipsSeen != null) s.tipsSeen.clear(); } },
                     "Optional. A tour of headquarters on your first turn, and a tip the first time you reach each part of the game.");
             wrap(g, s.tutorial ? "On: a tour of headquarters on your first turn, plus a tip the first time you reach each new part of the game." : "Off. Switch it on for a tour of headquarters and tips along the way.", ax + 18, y + 14, aw - 36, F_XS, C_DIM);
-            y += 48;
+            y += 44;
             text(g, "Chief of staff's advice", ax + 18, y, F_H3, C_TEXT);
             u.toggle(g, ax + aw - 18 - 36, y - 14, s.advisor, () -> s.advisor = !s.advisor, "A note each week on what needs attention: money, stamina, debates, the tipping-point state, staff and more.");
             wrap(g, s.advisor ? "On: a note each week on what needs your attention." : "Off. You can switch it on during the game (Campaign tab).", ax + 18, y + 14, aw - 36, F_XS, C_DIM);
@@ -9578,7 +9637,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             detail(u, g, c, 668, 118, DW - 48 - 668, 700, s);
             u.button(g, 48, 832, 150, 44, "Back", B_GHOST, () -> u.go(SC_SETUP));
             u.button(g, DW - 48 - 620, 832, 150, 44, "Edit platform", B_NORM, () -> PlatformEd.open(u, c, SC_PICK));
-            String run = "Run as " + c.name();
+            String run = s.role == ROLE_WATCH ? "Watch, following " + c.last : s.role == ROLE_MANAGER ? "Manage " + c.name() : "Run as " + c.name();
             if (Setup.nomStart(s.mode)) {
                 List<Cand> opp = partyList(c.party == DEM ? REP : DEM);
                 if (oppSel < 0 || oppSel >= opp.size() || opp.get(oppSel).party == c.party) { oppSel = 0; for (int i = 0; i < opp.size(); i++) if (opp.get(i) == Setup.likelyNominee(opp.get(0).party)) oppSel = i; }
@@ -9664,6 +9723,12 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             Hq.begin(u);
             u.go(SC_HQ);
             snd(Sfx.STING);
+            if (s.role == ROLE_WATCH) {
+                u.modal = null;
+                if (me != null && g.vpOf(me.party) == null && me.party <= REP) g.setVp(me.party, Primary.aiPickVp(g, me));
+                g.pending.clear();
+                Watch.start(u);
+            }
         }
 
         static Color ratingColor(int v, boolean inverse) {
@@ -10370,7 +10435,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         // ---------------------------------------------------------------- frame
         static void update(Battleground2028 u, double dt) {
             Game g = u.game;
-            if (fastForward) { spectatorStep(u); return; }
+            if (fastForward) { Watch.update(u, dt); return; }
             if (resolving) {
                 resolveT += dt;
                 if (resolveT > 0.45) { resolving = false; doResolve(u); }
@@ -10402,14 +10467,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             u.panel(g, RX, TOP, RW, BOT - TOP, null);
             StatePanel.draw(u, g, game, sel, RX + 12, TOP + 10, RW - 24, BOT - TOP - 20);
             if (resolving) resolvingOverlay(u, g, game);
-            if (fastForward) {
-                g.setColor(new Color(2, 6, 14, 200));
-                g.fillRect(0, 0, DW, DH);
-                textC(g, "The race goes on without you", DW / 2, DH / 2 - 20, F_DISPLAY, Color.white);
-                textC(g, weekStr(game.week) + "  -  " + PHASE[game.phase], DW / 2, DH / 2 + 20, F_H3, C_GOLD);
-                Camp d = game.nominee(DEM), r = game.nominee(REP);
-                if (d != null && r != null) textC(g, d.name() + " vs. " + r.name(), DW / 2, DH / 2 + 50, F_B, C_DIM);
-            }
+            if (fastForward) Watch.bar(u, g, game);
         }
 
         static void topBar(Battleground2028 u, Graphics2D g, Game game) {
@@ -10456,6 +10514,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             x = meter(u, g, x, "Name ID", me.nameId, C_ACCENT, nameTip(me));
             x = meter(u, g, x, "Enthusiasm", me.enthusiasm, C_GOLD, "How fired-up your base is: drives volunteers, small donors and turnout.");
             x = meter(u, g, x, "Stamina", me.stamina / 100.0, me.stamina < 40 ? C_BAD : C_TEAL, "Tired candidates make mistakes. Rest restores stamina.");
+            if (Manager.on(game)) x = meter(u, g, x, "Trust", me.trust, me.trust < 0.3 ? C_BAD : C_GOLD, "How much the candidate trusts you. Low trust means refused events, off-script moments - and maybe a new campaign manager.");
             // buttons
             double bx = DW - 16;
             boolean busy = resolving || u.modal != null;
@@ -10867,6 +10926,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             if (g.phase == PH_OVER) {
                 skip = 0;
                 if (g.result != null) { Night.start(u); return; }
+                if (g.set.primaryOnly && me != null) { u.go(SC_END); return; }
                 if (me != null && !me.active) { lostRace(u); return; }
             }
             if (me != null && !me.active && !g.spectator) { skip = 0; lostRace(u); return; }
@@ -10988,6 +11048,13 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                     new String[]{"Main menu", "Watch Election Night"}, new Runnable[]{() -> u.go(SC_HOME), () -> spectate(u)}, C_AMBER);
         }
 
+        /** Campaign-manager mode: the candidate let you go. */
+        static void fired(Battleground2028 u) {
+            Camp me = u.game.me();
+            u.modal("You're fired", me.name() + " has replaced you as campaign manager. The campaign goes on without you.\n\nYou can watch how it turns out, or return to the main menu.",
+                    new String[]{"Main menu", "Watch the rest"}, new Runnable[]{() -> u.go(SC_HOME), () -> spectate(u)}, C_BAD);
+        }
+
         static boolean fastForward;
 
         static void spectate(Battleground2028 u) {
@@ -11028,6 +11095,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 return;
             }
             if (ev == EV_CONCEDE) { g.pending.remove(0); lostRace(u); return; }
+            if (ev == EV_CONTESTED) { g.pending.remove(0); Contested.open(u, (Integer) p[4]); return; }
             if (ev == EV_PRESS) { g.pending.remove(0); if (me != null && me.active) Press.open(u, g, p); else showPending(u); return; }
             if (ev == EV_ENDORSE) { g.pending.remove(0); if (me != null && me.active) Deals.endorse(u, g, p); else { Endorse.resolve(g, g.camp((Integer) p[4]), null); showPending(u); } return; }
             if (ev == EV_DROPOUT) { g.pending.remove(0); Deals.dropout(u, g, p); return; }
@@ -11050,6 +11118,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                     if (!g.pending.isEmpty()) g.pending.remove(0);
                     Events.decide(g, me, ev, k);
                     u.toast("Decision: " + opts[k], C_ACCENT);
+                    if (me != null && me.fired) { fired(u); return; }
                     showPending(u);
                 };
             }
@@ -13161,7 +13230,38 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             Camp me = game.me();
             Camp d = game.nominee(DEM), r = game.nominee(REP);
             boolean won = me != null && !game.spectator && game.result != null && me.party == General.winnerParty(game);
-            text(g, game.result == null ? "The Campaign Is Over" : won ? "Victory" : "The Morning After", 48, 62, F_DISPLAY, won ? C_GOLD : Color.white);
+            boolean nomOnly = game.result == null && game.set.primaryOnly && me != null && !game.spectator;
+            text(g, nomOnly ? (me.nominee ? "The Nominee" : "The Nomination Goes Elsewhere") : game.result == null ? "The Campaign Is Over" : won ? "Victory" : "The Morning After", 48, 62, F_DISPLAY, won || nomOnly && me.nominee ? C_GOLD : Color.white);
+            if (nomOnly) {
+                Camp n = game.nominee(me.party);
+                List<Camp> field = new ArrayList<Camp>();
+                for (Camp k : game.camps) if (k.party == me.party && (k.delegates >= 1 || k == me)) field.add(k);
+                Collections.sort(field, (a, b) -> Double.compare(b.delegates, a.delegates));
+                text(g, n == null ? "" : n.name() + " is the " + PARTY[me.party] + " nominee, decided " + dateStr(game.week * 7) + (game.contested ? " at a contested convention." : "."), 50, 90, F_B, C_DIM);
+                u.panel(g, 40, 110, 820, 540, "The delegate count");
+                double need = Primary.needed(game, me.party), yy = 160, mx = 0;
+                for (Camp k : field) mx = Math.max(mx, k.delegates);
+                for (int i = 0; i < Math.min(9, field.size()); i++) {
+                    Camp k = field.get(i);
+                    Portrait.draw(g, k.c, 60, yy - 22, 40, 48, u.tsec, 0, false, false);
+                    text(g, k.name() + (k == me ? "  (you)" : ""), 112, yy, F_BB, k == me ? C_GOLD : Color.white);
+                    text(g, k == n ? "nominee" : k.dropWeek >= 0 && k.dropWeek < (n != null ? (n.party == DEM ? game.clinchWeekD : game.clinchWeekR) : 999) ? "withdrew " + dateStr(k.dropWeek * 7) : "", 112, yy + 18, F_XS, k == n ? C_GOLD : C_DIM);
+                    bar(g, 330, yy - 10, 420, 12, k.delegates / Math.max(need, mx), k == n ? C_GOLD : partyColor(me.party));
+                    textR(g, fmt0(k.delegates), 840, yy, F_BB, Color.white);
+                    yy += 52;
+                }
+                g.setColor(C_DIM);
+                double nx = 330 + 420 * need / Math.max(need, mx);
+                g.draw(new Line2D.Double(nx, 136, nx, yy - 30));
+                textC(g, fmt0(need) + (game.contested ? " for a first-ballot win" : " to win"), nx, 132, F_T, C_DIM);
+                wrap(g, me.nominee ? "You won the nomination. Play on to take the fight to November: choose a running mate, plan your convention and go for 270."
+                        : "Your campaign came up short. You can watch the rest of the race unfold - the conventions, the debates and Election Night.", 48, 690, 800, F_S, C_TEXT);
+                u.button(g, 48, 760, 340, 44, me.nominee ? "Play on: the general election" : "Watch the rest of the race", B_PRIMARY, () -> {
+                    game.set.primaryOnly = false;
+                    game.recorded = false;
+                    if (me.nominee) { game.phase = game.resumePhase; u.go(SC_HQ); Hq.showPending(u); } else Hq.spectate(u);
+                }, me.nominee ? "Keep going: the summer, the conventions, the debates and Election Night. The full race is scored separately." : null);
+            }
             if (game.result != null && d != null && r != null)
                 text(g, d.name() + " " + game.evD + "  -  " + r.name() + " " + game.evR + (game.evI > 0 && game.indep() != null ? "  -  " + game.indep().name() + " " + game.evI : "") + "  electoral votes", 50, 90, F_B, C_DIM);
             if (game.result != null) {
@@ -13707,7 +13807,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             u.button(g, 48, 832, 150, 44, "Back", B_GHOST, () -> u.go(cand.custom ? SC_CREATE : SC_PICK));
             if (opponentsOnly) u.button(g, 210, 832, 220, 44, "Likeliest nominees", B_NORM, () -> { s.lockD = Setup.likelyNominee(DEM).id; s.lockR = Setup.likelyNominee(REP).id; });
             if (!opponentsOnly) u.button(g, 210, 832, 200, 44, "Everyone runs", B_NORM, () -> { s.sitOut.clear(); s.lockD = null; s.lockR = null; });
-            u.button(g, DW - 48 - 300, 832, 300, 44, "Start the campaign", B_GOLD, () -> Screens.startGame(u, cand));
+            u.button(g, DW - 48 - 300, 832, 300, 44, s.role == ROLE_WATCH ? "Start watching" : "Start the campaign", B_GOLD, () -> Screens.startGame(u, cand));
         }
     }
 
@@ -16594,7 +16694,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             Camp me = g.me();
             if (me == null) return 0;
             double s;
-            if (g.result == null || g.spectator) s = 100 + 200 * Math.min(1, me.delegates / Math.max(1, Primary.needed(g, me.party)));
+            if (g.result == null && g.set.primaryOnly && me.nominee && !g.spectator) s = 800 + 200 * Math.min(1, me.delegates / Math.max(1, Primary.needed(g, me.party)) - 0.5) + 4 * Math.max(0, RNC_WEEK - g.week);
+            else if (g.result == null || g.spectator) s = 100 + 200 * Math.min(1, me.delegates / Math.max(1, Primary.needed(g, me.party)));
             else if (won(g)) {
                 s = 1000 + 3 * (myEv(g, me) - 270) + 20 * myMargin(g, me);
                 if (me.party <= REP) {
@@ -16638,7 +16739,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             g.recorded = true;
             Camp me = g.me();
             if (me == null) return;
-            String result = g.result == null || g.spectator ? "Lost the nomination" : won(g) ? "Won the presidency" : "Lost the general election";
+            String result = g.result == null && g.set.primaryOnly && me.nominee && !g.spectator ? "Won the nomination" : me.fired ? "Fired" : g.result == null || g.spectator ? "Lost the nomination" : won(g) ? "Won the presidency" : "Lost the general election";
             List<String> a = earned(g);
             StringBuilder ids = new StringBuilder();
             for (String x : a) ids.append(ids.length() > 0 ? "," : "").append(x);
@@ -17064,6 +17165,483 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
     };
 
     // =====================================================================
+    //  41.  MORE WAYS TO PLAY: the contested convention, campaign-manager mode, watching the race, and 100 elections at once
+    // =====================================================================
+    static final int ROLE_CANDIDATE = 0, ROLE_MANAGER = 1, ROLE_WATCH = 2;
+    static final int EV_CONTESTED = 43, EV_MANAGER = 44;
+
+    static final class Contested {
+        static int party = -1, ballot, moves;
+        static double[] dels;                 // current delegate support per campaign idx
+        static double leaders, needed;        // party leaders still to commit (from the second ballot), votes needed
+        static boolean vpOffered, done;
+        static List<String> log = new ArrayList<String>();
+        static int winner = -1;
+
+        /** Should the player play out this convention? */
+        static boolean playable(Game g, int p) {
+            Camp me = g.me();
+            return me != null && me.human && me.active && me.party == p && g.party(p).size() > 1 && !g.spectator;
+        }
+
+        static void open(Battleground2028 u, int p) {
+            Game g = u.game;
+            party = p;
+            ballot = 1;
+            moves = 2;
+            vpOffered = false;
+            done = false;
+            winner = -1;
+            log.clear();
+            dels = new double[g.camps.size()];
+            double tot = 0;
+            for (Camp k : g.party(p)) { dels[k.idx] = k.delegates; tot += k.delegates; }
+            needed = Primary.needed(g, p);
+            leaders = Math.round(tot * 0.12);
+            needed = Math.floor((Setup.totalDelegates(g, p) + leaders) / 2) + 1;
+            log.add("FIRST BALLOT: no candidate has a majority. Pledged delegates are free to move on the second ballot, and " + Math.round(leaders) + " party leaders join the voting.");
+            u.go(SC_CONTEST);
+            snd(Sfx.GAVEL);
+        }
+
+        static List<Camp> field(Game g) {
+            List<Camp> l = new ArrayList<Camp>(g.party(party));
+            Collections.sort(l, (a, b) -> Double.compare(dels[b.idx], dels[a.idx]));
+            return l;
+        }
+
+        /** Moves a share of one candidate's delegates to another. */
+        static double shift(Camp from, Camp to, double frac) {
+            double n = Math.round(dels[from.idx] * frac);
+            dels[from.idx] -= n;
+            dels[to.idx] += n;
+            return n;
+        }
+
+        static void offerVp(Game g, Camp me, Camp r) {
+            vpOffered = true;
+            moves--;
+            double p = 0.55 + 0.3 * (r.a(A_EST) / 100.0) - 0.2 * Math.max(0, dels[r.idx] - dels[me.idx]) / Math.max(1, dels[me.idx]);
+            if (g.rng.nextDouble() < p) {
+                double n = shift(r, me, 0.7);
+                g.setVp(me.party, r.c);
+                log.add(r.name() + " accepts the vice-presidential slot and releases " + Math.round(n) + " delegates to you.");
+            } else log.add(r.name() + " turns down the vice-presidential slot: they think they can win this.");
+        }
+
+        static void cabinet(Game g, Camp me, Camp r) {
+            moves--;
+            double n = shift(r, me, 0.25 + 0.15 * g.rng.nextDouble());
+            me.deals.add("Cabinet post for " + r.last());
+            log.add("A cabinet post for " + r.last() + "'s team: " + Math.round(n) + " of their delegates come over.");
+        }
+
+        static void concession(Game g, Camp me, Camp r) {
+            moves--;
+            double moved = 0;
+            for (int i = 0; i < NI; i++) { double d = r.plat[i] - me.plat[i]; me.plat[i] += d * 0.25; moved += Math.abs(d * 0.25); }
+            me.flipflop += moved * 0.3;
+            double n = shift(r, me, 0.3 + 0.1 * g.rng.nextDouble());
+            log.add("You accept " + r.last() + "'s planks in the platform. " + Math.round(n) + " of their delegates come over; some voters call it a flip-flop.");
+        }
+
+        static void leadersPitch(Game g, Camp me) {
+            moves--;
+            double est = me.a(A_EST) / 100.0;
+            double n = Math.round(leaders * (0.15 + 0.35 * est) * (0.7 + 0.6 * g.rng.nextDouble()));
+            n = Math.min(n, leaders);
+            leaders -= n;
+            dels[me.idx] += n;
+            log.add("You work the phones with governors, senators and party chairs: " + Math.round(n) + " party leaders commit to you.");
+        }
+
+        static void floor(Game g, Camp me) {
+            moves--;
+            double spe = me.a(A_SPE) / 100.0;
+            double total = 0;
+            for (Camp k : field(g)) if (k != me) total += shift(k, me, 0.03 + 0.07 * spe * g.rng.nextDouble());
+            me.momentum += 0.03;
+            log.add("A rousing speech to the floor: " + Math.round(total) + " delegates drift your way.");
+        }
+
+        /** The next ballot: rivals make their moves, delegates drift, party leaders commit. */
+        static void nextBallot(Game g) {
+            ballot++;
+            moves = 2;
+            List<Camp> f = field(g);
+            Camp me = g.me();
+            // the strongest rival works the floor too
+            Camp rival = null;
+            for (Camp k : f) if (k != me) { rival = k; break; }
+            if (rival != null) {
+                double n = Math.round(leaders * (0.1 + 0.3 * rival.a(A_EST) / 100.0) * (0.6 + 0.8 * g.rng.nextDouble()));
+                n = Math.min(n, leaders);
+                leaders -= n;
+                dels[rival.idx] += n;
+                for (Camp k : f) if (k != rival && k != me && dels[k.idx] < dels[rival.idx] * 0.4) shift(k, rival, 0.2 * g.rng.nextDouble());
+                log.add(rival.last() + "'s whips pick up " + Math.round(n) + " party leaders" + (f.size() > 2 ? " and some delegates from the also-rans." : "."));
+            }
+            // delegates of the weakest drift toward the front-runners
+            Camp lead = field(g).get(0);
+            for (Camp k : field(g)) if (k != lead && dels[k.idx] < dels[lead.idx] * 0.3) shift(k, lead, 0.15);
+            // undecided leaders break toward the leader on later ballots
+            if (ballot >= 3) { double n = Math.round(leaders * 0.4); leaders -= n; dels[field(g).get(0).idx] += n; }
+            Camp top = field(g).get(0);
+            log.add("BALLOT " + ballot + ": " + top.name() + " leads with " + Math.round(dels[top.idx]) + " (" + Math.round(needed) + " needed).");
+            if (dels[top.idx] >= needed) finish(g, top, false);
+            else if (ballot >= 5) {
+                // a brokered result: the party leaders settle on whoever is strongest with them
+                Camp best = null;
+                double bv = -1;
+                for (Camp k : field(g)) { double v = dels[k.idx] + leaders * k.a(A_EST) / 100.0 + 60 * k.momentum; if (v > bv) { bv = v; best = k; } }
+                log.add("After five ballots, the party leaders broker a deal for " + best.name() + ".");
+                finish(g, best, true);
+            }
+        }
+
+        static void finish(Game g, Camp w, boolean brokered) {
+            done = true;
+            winner = w.idx;
+            g.contested = true;
+            g.contestPending = -1;
+            for (Camp k : g.party(party)) k.delegates = dels[k.idx];
+            g.log(NK_BIG, "CONTESTED CONVENTION: on ballot " + ballot + ", " + w.name() + " wins the " + PARTY[party] + " nomination" + (brokered ? " in a deal brokered by party leaders." : "."));
+            Primary.nominate(g, w, true);
+            snd(w.human ? Sfx.CHEER : Sfx.BELL);
+        }
+
+        static void draw(Battleground2028 u, Graphics2D g) {
+            Game game = u.game;
+            Camp me = game.me();
+            Screens.header(u, g, "Contested Convention", "No one has a majority. Win over the delegates and the party leaders, ballot by ballot. " + Math.round(needed) + " votes needed to win.");
+            List<Camp> f = field(game);
+            u.panel(g, 48, 124, 900, 690, "Ballot " + ballot);
+            double total = leaders;
+            for (Camp k : f) total += dels[k.idx];
+            double y = 170;
+            for (Camp k : f) {
+                Portrait.draw(g, k.c, 66, y - 4, 50, 60, 0, 0, true, true);
+                text(g, k.name() + (k == me ? "  (you)" : ""), 126, y + 14, F_SB, k == me ? C_GOLD : Color.white);
+                double frac = dels[k.idx] / Math.max(1, total);
+                bar(g, 126, y + 26, 640, 14, frac, k == me ? C_GOLD : partyColor(k.party));
+                text(g, Math.round(dels[k.idx]) + "", 780, y + 38, F_BB, C_TEXT);
+                y += 74;
+                if (y > 620) break;
+            }
+            text(g, "Party leaders still uncommitted: " + Math.round(leaders), 126, y + 14, F_S, C_DIM);
+            double lx = 126 + 640 * needed / Math.max(1, total);
+            g.setColor(Color.white);
+            g.fill(new Rectangle2D.Double(lx - 1, 160, 2, y - 160));
+            text(g, "majority", lx + 4, 160, F_T, C_TEXT);
+            double ly = 690;
+            for (int i = Math.max(0, log.size() - 4); i < log.size(); i++) { ly += 2 + wrap(g, log.get(i), 66, ly, 860, F_XS, i == log.size() - 1 ? Color.white : C_DIM); }
+            double px = 964, pw = DW - 48 - px;
+            u.panel(g, px, 124, pw, 690, done ? "The nominee" : "Your moves this ballot (" + moves + " left)");
+            if (done) {
+                Camp w = game.camp(winner);
+                Portrait.draw(g, w.c, px + 20, 170, 150, 180, u.tsec, 0.3, false, true);
+                text(g, w.name(), px + 190, 200, F_H2, Color.white);
+                wrap(g, w == me ? "You are the " + PARTY[party] + " nominee. On to November." : w.name() + " is the nominee. Your campaign is over.", px + 190, 226, pw - 210, F_S, C_TEXT);
+                u.button(g, DW - 48 - 300, 832, 300, 44, "Continue", B_GOLD, () -> { if (Primary.nominationOver(game)) { u.go(SC_END); return; } u.go(SC_HQ); Hq.showPending(u); });
+                return;
+            }
+            double by = 166;
+            Camp top = null;
+            for (Camp k : f) if (k != me) { top = k; break; }
+            for (Camp r : f) {
+                if (r == me) continue;
+                final Camp rr = r;
+                text(g, r.name() + " (" + Math.round(dels[r.idx]) + ")", px + 18, by + 14, F_SB, C_TEXT);
+                by += 22;
+                boolean can = moves > 0;
+                u.button(g, px + 18, by, (pw - 48) / 3, 26, "VP slot", can && !vpOffered ? B_NORM : B_OFF, can && !vpOffered ? () -> offerVp(game, me, rr) : null, "Offer " + r.last() + " the vice-presidential slot. Most of their delegates would follow. One offer per convention.");
+                u.button(g, px + 24 + (pw - 48) / 3, by, (pw - 48) / 3, 26, "Cabinet post", can ? B_NORM : B_OFF, can ? () -> cabinet(game, me, rr) : null, "Promise a cabinet post: about a quarter of their delegates move.");
+                u.button(g, px + 30 + 2 * (pw - 48) / 3, by, (pw - 48) / 3, 26, "Platform deal", can ? B_NORM : B_OFF, can ? () -> concession(game, me, rr) : null, "Adopt their planks: a third of their delegates move, at the cost of looking like a flip-flopper.");
+                by += 40;
+                if (by > 520) break;
+            }
+            boolean can = moves > 0;
+            u.button(g, px + 18, by + 10, pw - 36, 30, "Work the party leaders", can && leaders > 0 ? B_PRIMARY : B_OFF, can && leaders > 0 ? () -> leadersPitch(game, me) : null, "Governors, senators and party chairs vote from the second ballot. Establishment ties help.");
+            u.button(g, px + 18, by + 50, pw - 36, 30, "Rally the floor", can ? B_PRIMARY : B_OFF, can ? () -> floor(game, me) : null, "A speech to the hall: a few delegates from every camp drift your way. Speechmaking helps.");
+            u.button(g, DW - 48 - 300, 832, 300, 44, "Call ballot " + (ballot + 1), B_GOLD, () -> nextBallot(game));
+            if (dels[me.idx] >= needed) u.button(g, DW - 48 - 620, 832, 300, 44, "Claim the nomination", B_PRIMARY, () -> finish(game, me, false));
+        }
+    }
+
+    // ---------------------------------------------------------------- campaign-manager mode
+    static final class Manager {
+        static boolean on(Game g) { return g.set.role == ROLE_MANAGER; }
+
+        /** The candidate has a mind of their own: refusals, unscripted moments, and how much they trust you. */
+        static void week(Game g, Camp me) {
+            if (me == null || !me.human || !on(g) || g.daily() && g.day != 0) return;
+            Random r = g.rng;
+            double dis = me.a(A_DIS) / 100.0, trust = me.trust;
+            String who = me.last();
+            // refusals: some events this candidate just won't do when trust is low
+            int refused = 0;
+            for (int i = 0; i < NSLOT && refused < 2; i++) {
+                int a = me.act[i];
+                if (a == ACT_NONE || a == ACT_REST) continue;
+                double base = a == ACT_CALLTIME || a == ACT_FUNDRAISER ? 0.10 : a == ACT_TV ? 0.04 : 0.03;
+                if (me.stamina < 45) base += 0.08;
+                if (r.nextDouble() < base * (1.4 - trust) * (1.3 - dis)) {
+                    String what = ACT_NAME[a].toLowerCase();
+                    me.act[i] = ACT_REST;
+                    refused++;
+                    g.log(NK_BAD, "THE CANDIDATE: " + who + " refuses the " + DAYS[i / 3] + " " + what + (me.loc[i] >= 0 && ACT_LOCAL[a] ? " in " + STATES[me.loc[i]].name : "") + " and takes the time off instead.");
+                }
+            }
+            // off script
+            if (r.nextDouble() < 0.18 * (1.25 - dis) * (1.3 - trust)) {
+                double x = r.nextDouble();
+                if (x < 0.35) {
+                    int f = favouriteFrame(me);
+                    if (f != me.frame) { me.frame = f; g.log(NK_INFO, "THE CANDIDATE: " + who + " ignores your message and spends the week on '" + FRAME[f] + "'."); }
+                } else if (x < 0.6) {
+                    me.negativity += 0.2; me.enthusiasm += 0.01;
+                    Camp o = g.opp();
+                    g.log(NK_INFO, "THE CANDIDATE: off script, " + who + " tears into " + (o != null ? o.last() : "rivals") + " at a rally. The base loves it; the pundits don't.");
+                } else if (x < 0.8 && r.nextDouble() < me.a(A_VIR) / 100.0) Week.viral(g, me, "an unscripted riff");
+                else Events.gaffe(g, me, ACT_RALLY, me.location);
+            }
+            // trust follows results, rest and how hard you drive them
+            double poll = Hq.myPoll(g, me);
+            if (!Double.isNaN(me.lastPoll)) me.trust += poll > me.lastPoll + 0.3 ? 0.02 : poll < me.lastPoll - 1 ? -0.03 : 0;
+            me.lastPoll = poll;
+            if (me.stamina < 35) { me.trust -= 0.03; if (r.nextDouble() < 0.3) g.log(NK_INFO, "THE CANDIDATE: \"You're running me into the ground,\" " + who + " tells you."); }
+            int rest = 0;
+            for (int i = 0; i < NSLOT; i++) if (me.act[i] == ACT_REST) rest++;
+            if (rest >= 2) me.trust += 0.01;
+            me.trust = clamp(me.trust, 0, 1);
+            if (me.trust < 0.2 && !me.mgrWarned) {
+                me.mgrWarned = true;
+                Events.ask(g, EV_MANAGER, "The candidate is losing faith in you", who + " has been asking friends whether it's time for a new campaign manager.",
+                        new String[]{"Give them more say over the schedule", "Hold firm: it's working", "Offer to resign"}, -1);
+            }
+        }
+
+        static int favouriteFrame(Camp k) {
+            int f = k.c.faction;
+            if (f == F_DSOC || f == F_PROG || f == F_MAGA || f == F_NATCON) return 8 < FRAME.length ? 8 : 0;
+            if (f == F_HAWK) return 4;
+            if (f == F_ABUN || f == F_TECHR) return 7;
+            return 1;
+        }
+
+        static void decide(Game g, Camp k, int opt) {
+            if (opt == 0) { k.trust += 0.2; g.set.staff[0] = true; g.log(NK_INFO, "You hand the schedule to the candidate's people for now. Trust recovers."); }
+            else if (opt == 1) {
+                if (g.rng.nextDouble() < 0.45) { k.fired = true; g.log(NK_BIG, k.name().toUpperCase() + " FIRES THE CAMPAIGN MANAGER. Your campaign is over."); }
+                else { k.trust += 0.1; g.log(NK_GOOD, "The candidate backs down. You keep your job - for now."); }
+            } else { k.trust = 0.55; k.momentum -= 0.03; g.log(NK_INFO, "Your offer to resign clears the air. The candidate asks you to stay."); }
+            k.mgrWarned = false;
+        }
+    }
+
+    // ---------------------------------------------------------------- watching the race
+    static final class Watch {
+        static int speed = 2;                 // 0 paused, 1 slow, 2 normal, 3 fast
+        static double acc;
+        static final double[] INTERVAL = {1e9, 2.0, 0.8, 0};
+        static final String[] SPEED = {"Pause", "Slow", "Normal", "Fast"};
+
+        static void start(Battleground2028 u) {
+            Game g = u.game;
+            g.spectator = true;
+            for (Camp k : g.camps) k.human = false;
+            Hq.fastForward = true;
+            speed = 2;
+            acc = 0;
+            u.go(SC_HQ);
+        }
+
+        /** Called every frame while the race plays itself. */
+        static void update(Battleground2028 u, double dt) {
+            if (speed == 0) return;
+            acc += dt;
+            if (acc < INTERVAL[speed]) return;
+            acc = 0;
+            Hq.spectatorStep(u);
+        }
+
+        static void bar(Battleground2028 u, Graphics2D g, Game game) {
+            double w = 420, x = DW - 16 - w, y = 9;
+            g.setColor(new Color(9, 15, 28));
+            g.fill(new Rectangle2D.Double(x - 246, 0, w + 262, 58));
+            text(g, game.set.role == ROLE_WATCH ? "Watching the race" : "The race goes on without you", x - 220, 26, F_SB, C_GOLD);
+            text(g, PHASE[game.phase], x - 220, 44, F_XS, C_DIM);
+            u.segmented(g, x, y, w - 120, 40, SPEED, speed, i -> speed = i, new String[]{"Stop the clock to look around.", "A week every two seconds.", "A week a second, roughly.", "As fast as it will go."});
+            u.button(g, x + w - 112, y, 112, 40, "Skip ahead", B_GOLD, () -> skip(u), "Simulate straight to Election Night.");
+        }
+
+        static void skip(Battleground2028 u) {
+            Game g = u.game;
+            int guard = 0;
+            while (g.phase != PH_OVER && g.week <= ELECTION_WEEK && guard++ < 400) {
+                g.pending.clear();
+                for (Debate d : Debates.thisWeek(g)) if (!d.done) { DebateRun r = Debates.start(g, d); r.myIdx = -1; while (!r.over) Debates.segment(g, r, -1); }
+                Week.resolve(g);
+            }
+            Hq.spectatorStep(u);
+        }
+    }
+
+    // ---------------------------------------------------------------- 100 elections at once
+    static final class Batch {
+        static boolean running;
+        static int total = 100, done, mode;
+        static Game cur;
+        static Settings base;
+        static long seed0;
+        static int winD, winR, winI, house;
+        static double evD, popD, popR;
+        static int[] stateD = new int[NS], hist = new int[54], tip = new int[NS];
+        static Map<String, Integer> nominees = new HashMap<String, Integer>();
+
+        static void start(Battleground2028 u, int m) {
+            base = u.setup;
+            Custom.migrate(base);
+            mode = m;
+            running = true;
+            done = 0;
+            cur = null;
+            seed0 = System.nanoTime();
+            winD = winR = winI = house = 0;
+            evD = popD = popR = 0;
+            Arrays.fill(stateD, 0);
+            Arrays.fill(hist, 0);
+            Arrays.fill(tip, 0);
+            nominees.clear();
+            u.go(SC_BATCH);
+        }
+
+        static Game newGame() {
+            int keep = base.mode;
+            base.mode = mode;
+            base.seed = seed0 + done * 7919L;
+            if (base.candId == null || candById(base.candId) == null) base.candId = Setup.likelyNominee(DEM).id;
+            Cand c = base.custom != null ? base.custom : candById(base.candId);
+            if (c.party == IND) { base.custom = null; base.candId = Setup.likelyNominee(DEM).id; }
+            base.party = candById(base.candId) != null ? candById(base.candId).party : DEM;
+            Game g = Setup.newGame(base);
+            base.mode = keep;
+            for (Camp k : g.camps) k.human = false;
+            g.player = -1;
+            return g;
+        }
+
+        /** Runs games a slice at a time so the window stays responsive. */
+        static void update(Battleground2028 u) {
+            if (!running) return;
+            long t0 = System.currentTimeMillis();
+            while (System.currentTimeMillis() - t0 < 30 && running) {
+                if (cur == null) { cur = newGame(); continue; }
+                Game g = cur;
+                if (g.phase == PH_OVER || g.week > ELECTION_WEEK) { record(g); cur = null; done++; if (done >= total) running = false; continue; }
+                g.pending.clear();
+                for (Debate d : Debates.thisWeek(g)) if (!d.done) { DebateRun r = Debates.start(g, d); r.myIdx = -1; while (!r.over) Debates.segment(g, r, -1); }
+                Week.resolve(g);
+                g.pending.clear();
+            }
+        }
+
+        static void record(Game g) {
+            if (g.result == null) return;
+            int w = General.winnerParty(g);
+            if (w == DEM) winD++; else if (w == REP) winR++; else winI++;
+            if (g.contingent >= 0) house++;
+            evD += g.evD;
+            double t = Math.max(1, g.popD + g.popR + g.popO);
+            popD += g.popD / t; popR += g.popR / t;
+            hist[clampi(g.evD / 10, 0, 53)]++;
+            double[] m = new double[NS];
+            for (int s = 0; s < NS; s++) { m[s] = Vote.margin(g.result[s]); if (m[s] > 0) stateD[s]++; }
+            Integer[] idx = new Integer[NS];
+            for (int s = 0; s < NS; s++) idx[s] = s;
+            final double[] mm = m;
+            final boolean dw = g.evD >= g.evR;
+            Arrays.sort(idx, (a, b) -> Double.compare(dw ? mm[b] : mm[a], dw ? mm[a] : mm[b]));
+            int acc = 0;
+            for (int s : idx) { acc += STATES[s].ev; if (acc >= 270) { tip[s]++; break; } }
+            for (int p = DEM; p <= REP; p++) {
+                Camp n = g.nominee(p);
+                if (n == null) continue;
+                String key = n.name() + " (" + PARTY_SHORT[p] + ")";
+                Integer v = nominees.get(key);
+                nominees.put(key, v == null ? 1 : v + 1);
+            }
+        }
+
+        static void draw(Battleground2028 u, Graphics2D g) {
+            int n = Math.max(1, done);
+            Screens.header(u, g, "100 Elections", (mode == MODE_FULL ? "Full campaigns, primaries and all" : "General elections") + " under your settings: " + SCEN_NAME[base.scenario] + (Custom.changes(base) > 0 ? ", with custom conditions" : "") + ".");
+            u.panel(g, 48, 124, 560, 690, running ? "Running: " + done + " of " + total : "Results of " + done + " elections");
+            bar(g, 66, 160, 524, 8, done / (double) total, C_GOLD);
+            text(g, "Democrats", 66, 206, F_H2, C_DEM_L);
+            text(g, Math.round(100.0 * winD / n) + "%", 66, 250, F_NUMXL, Color.white);
+            textR(g, "Republicans", 590, 206, F_H2, C_REP_L);
+            textR(g, Math.round(100.0 * winR / n) + "%", 590, 250, F_NUMXL, Color.white);
+            if (winI > 0 || house > 0) textC(g, "Independent " + winI + "   |   decided by the House " + house, 328, 240, F_XS, C_IND);
+            text(g, "Average electoral votes for the Democrat: " + Math.round(evD / n) + ".  Average popular vote: D " + fmt1(100 * popD / n) + "%, R " + fmt1(100 * popR / n) + "%.", 66, 284, F_XS, C_DIM);
+            label(g, "Democratic electoral votes", 66, 320, C_DIM);
+            int mx = 1;
+            for (int v : hist) mx = Math.max(mx, v);
+            for (int i = 0; i < 54; i++) {
+                double h = 140.0 * hist[i] / mx;
+                g.setColor(i * 10 >= 270 ? C_DEM : C_REP);
+                g.fill(new Rectangle2D.Double(66 + i * 9.7, 480 - h, 8, h));
+            }
+            g.setColor(new Color(255, 255, 255, 40));
+            g.fill(new Rectangle2D.Double(66, 480, 524, 1));
+            g.setColor(Color.white);
+            g.fill(new Rectangle2D.Double(66 + 27 * 9.7 - 1, 330, 2, 152));
+            for (int t : new int[]{0, 100, 200, 300, 400, 500}) textC(g, String.valueOf(t), 66 + t / 10.0 * 9.7 + 4, 496, F_T, C_DIM);
+            textC(g, "270", 66 + 27 * 9.7, 326, F_T, Color.white);
+            // the states that went both ways
+            List<Integer> sw = new ArrayList<Integer>();
+            for (int st = 0; st < NS; st++) if (stateD[st] > 0 && stateD[st] < done) sw.add(st);
+            final int nn = n;
+            Collections.sort(sw, (a, b) -> Double.compare(Math.abs(stateD[a] / (double) nn - 0.5), Math.abs(stateD[b] / (double) nn - 0.5)));
+            double sy = mode == MODE_FULL ? 640 : 530;
+            label(g, sw.isEmpty() ? (done > 0 ? "Every state went the same way every time" : "") : "States that went both ways (how often the Democrat won)", 66, sy, C_DIM);
+            for (int i = 0; i < Math.min(mode == MODE_FULL ? 6 : 12, sw.size()); i++) {
+                int st = sw.get(i);
+                double rx = 66 + (i % 3) * 176, ry = sy + 22 + (i / 3) * 22;
+                text(g, STATES[st].name, rx, ry, F_XS, C_TEXT);
+                textR(g, Math.round(100.0 * stateD[st] / n) + "%", rx + 160, ry, F_XSB, stateD[st] * 2 >= n ? C_DEM_L : C_REP_L);
+            }
+            if (mode == MODE_FULL) {
+                label(g, "Nominees", 66, 520, C_DIM);
+                List<String> l = new ArrayList<String>(nominees.keySet());
+                Collections.sort(l, (a, b) -> nominees.get(b) - nominees.get(a));
+                double y = 540;
+                for (int i = 0; i < Math.min(10, l.size()); i++) {
+                    text(g, l.get(i), 66 + (i % 2) * 262, y + 12 + (i / 2) * 20, F_XS, C_TEXT);
+                    textR(g, nominees.get(l.get(i)) + "", 66 + (i % 2) * 262 + 240, y + 12 + (i / 2) * 20, F_XSB, C_GOLD);
+                }
+            }
+            int best = 0;
+            for (int s = 0; s < NS; s++) if (tip[s] > tip[best]) best = s;
+            if (done > 0) text(g, "Most common tipping-point state: " + STATES[best].name + " (" + Math.round(100.0 * tip[best] / n) + "%)", 66, 780, F_SB, C_GOLD);
+            double px = 624, pw = DW - 48 - px;
+            u.panel(g, px, 124, pw, 690, "How often each state went Democratic");
+            double[] f = USMap.fit(px + 10, 170, pw - 20, 520);
+            for (int s = 0; s < NS; s++) {
+                double p = stateD[s] / (double) n;
+                USMap.cur[s] = done == 0 ? C_STATE : marginColor((p - 0.5) * 40, 1);
+            }
+            Night.fitDraw(u, g, f);
+            if (u.my > 170 && u.my < 690 && u.mx > px) {
+                int hs = USMap.stateAt(f, u.mx, u.my);
+                if (hs >= 0) u.tip = STATES[hs].name + ": the Democrat won " + stateD[hs] + " of " + done + "  (tipping point " + tip[hs] + " times)";
+            }
+            u.button(g, 48, 832, 180, 44, running ? "Stop" : "Back", B_GHOST, () -> { running = false; cur = null; u.go(SC_SETUP); });
+            if (!running) u.button(g, DW - 48 - 300, 832, 300, 44, "Run another 100", B_GOLD, () -> start(u, mode));
+        }
+    }
+
+    // =====================================================================
     //  MAIN
     // =====================================================================
     public static void main(String[] args) {
@@ -17090,6 +17668,14 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 for (int i = 0; i < ids.length; i++) Portrait.draw(g, candById(ids[i]), 10 + i * 410, 10, 400, 480, 0.7 + i, 0.6, false, true);
                 g.dispose();
                 try { javax.imageio.ImageIO.write(img, "png", new File(a[1])); } catch (IOException e) { e.printStackTrace(); }
+            }
+            if (what.equals("batch")) {
+                Settings s = new Settings();
+                Batch.base = s; Batch.mode = a.length > 2 ? Integer.parseInt(a[2]) : MODE_GENERAL; Batch.total = a.length > 1 ? Integer.parseInt(a[1]) : 20;
+                Batch.running = true; Batch.done = 0; Batch.seed0 = 77; Batch.cur = null;
+                Batch.winD = Batch.winR = Batch.winI = 0; Batch.nominees.clear();
+                while (Batch.running) Batch.update(null);
+                System.out.println("batch " + Batch.done + ": D " + Batch.winD + " R " + Batch.winR + " I " + Batch.winI + " avg D EV " + Math.round(Batch.evD / Batch.done) + " nominees " + Batch.nominees);
             }
             if (what.equals("game")) {
                 int runs = a.length > 1 ? Integer.parseInt(a[1]) : 1;
@@ -17240,6 +17826,9 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 u.go(SC_CUSTOM); shot(u, dir, "v3_custom");
                 cs.mode = MODE_SUMMER; cs.candId = "shapiro"; cs.party = DEM; cs.seed = 44; cs.myParty = true;
                 u.go(SC_SETUP); shot(u, dir, "v3_setup");
+                cs.role = ROLE_WATCH; u.go(SC_SETUP); shot(u, dir, "v3_setup_watch");
+                cs.role = ROLE_MANAGER; cs.primaryOnly = true; cs.mode = MODE_FULL; u.go(SC_SETUP); shot(u, dir, "v3_setup_manager");
+                cs.role = ROLE_CANDIDATE; cs.primaryOnly = false; cs.mode = MODE_SUMMER;
                 Screens.startGame(u, candById("shapiro"));
                 u.modal = null;
                 Game vg = u.game;
@@ -17493,6 +18082,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 if (k.equals("mood")) { int i = Integer.parseInt(v); for (int j = 0; j < 5; j++) Custom.moodSet(s, j, Custom.MOOD_VAL[i][j]); }
                 if (k.equals("weeks")) s.turnWeeks = Integer.parseInt(v);
                 if (k.equals("ev")) s.evCat[Integer.parseInt(v)] = false;
+                if (k.equals("primonly")) s.primaryOnly = true;
+                if (k.equals("role")) s.role = Integer.parseInt(v);
             }
         }
 
@@ -17543,6 +18134,11 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                     + "  EV " + g.evD + "-" + g.evR + (g.evI > 0 ? "-I" + g.evI : "") + "  pop D " + fmt1(g.popD / Math.max(1, g.popD + g.popR + g.popO) * 100) + " R " + fmt1(g.popR / Math.max(1, g.popD + g.popR + g.popO) * 100)
                     + " O " + fmt1(g.popO / Math.max(1, g.popD + g.popR + g.popO) * 100) + (g.popI > 0 ? " (I " + fmt1(g.popI / Math.max(1, g.popD + g.popR + g.popO) * 100) + ")" : "")
                     + (g.contingent >= 0 ? " HOUSE PICKS " + PARTY[g.contingent] : "") + "  House D " + g.houseSeatsD + "  [" + (System.currentTimeMillis() - t0) + " ms]");
+            if (set.role == ROLE_MANAGER && g.me() != null) {
+                int ref = 0, off = 0;
+                for (News n : g.news) if (n.text.startsWith("THE CANDIDATE:")) { if (n.text.contains("refuses")) ref++; else off++; }
+                System.out.println("  manager: trust " + Math.round(g.me().trust * 100) + "%" + ", refusals " + ref + ", off script " + off + (g.me().fired ? ", FIRED" : ""));
+            }
             if (ind) { Camp k = g.indep(); if (k != null) System.out.println("  independent: ballots " + Ballot.count(k) + " (" + Ballot.evOnBallot(k) + " EV), raised " + money(k.raised) + ", name ID " + pct0(k.nameId) + ", final poll " + fmt1(g.natPubI)); }
             if (g.result != null) {
                 StringBuilder sb = new StringBuilder("  ");
@@ -17621,6 +18217,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 if (me == null) continue;
                 if (ev == EV_VP) { g.setVp(me.party, Primary.aiPickVp(g, me)); continue; }
                 if (ev == EV_CONCEDE) continue;
+                if (ev == EV_CONTESTED) { Events.decide(g, me, ev, 0); continue; }
                 if (ev == EV_DEBATE_DEAL) continue;
                 Events.decide(g, me, ev, AI.choose(g, me, ev, ((String[]) p[3]).length));
             }
