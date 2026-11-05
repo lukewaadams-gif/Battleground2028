@@ -38,6 +38,19 @@ The window scales to your screen. The game autosaves every week to a `.battlegro
   - turn event categories on or off
   - play turns of one, two or four weeks
   - add a third party of your own design: name, candidate, ideology, home state and strength
+- **Start on July 15** as the presumptive nominee, with the conventions still ahead.
+- **Your convention:** pick the platform's three priorities and settle two platform fights, choose four primetime speakers, and write your acceptance speech (opening, core argument, close). How well it plays sets your bounce.
+- **Press conferences** at a few big moments: the first votes, Super Tuesday, clinching, your convention, the first debate and the final weeks. Answer on substance, pivot, hit back or laugh it off.
+- **Scandals play out over weeks.** Apologise, deny, counterattack or wait it out. Each choice has its own consequences, including documents that surface later.
+- **Named staff** with skills, traits and salaries: a campaign manager, pollster, communications, field, media and finance directors. Hire, fire, and fend off rivals who try to poach them.
+- **Ad studio:** build ads from tone, issue, audience and messenger, test them with a focus group, and choose what airs.
+- **Coattails:** campaign alongside your party's Senate candidates and send them money.
+- **Your running mate** gets three stops a week, and you play the vice-presidential debate yourself.
+- **Forecast:** win probability over time, the distribution of outcomes, the tipping-point state, and a clickable path-to-270 map.
+- **Chief of staff:** a note each week on what needs attention (you can switch it off).
+- **Final score, 24 achievements and a Hall of Fame** of your finished campaigns.
+- **Election night by county:** watch all 3,100 counties report, with anchors calling states, flagging red mirages and checking in on the big counties.
+- **New faces from the midterms:** James Talarico, Roy Cooper, Sherrod Brown and Amy Klobuchar join the Democratic field, and the opening primary polls are updated to the late-2026 averages.
 - **The 2026 midterm results** feed the model: each state's Senate and governor margins, about 255 Democratic House seats, 54 Democratic senators and a D+13 national House vote.
 - The browser version is now generated from the Java source, so the two always play the same game.
 
@@ -110,6 +123,9 @@ Each state's electorate is modelled as 96 cells: 16 religious, racial and educat
 ## Sources
 
 - Projected 2030 apportionment: median of the Cervas, Brennan Center and American Redistricting Project projections from the Census Bureau's 2025 estimates ([Decision Desk HQ, February 2026](https://decisiondeskhq.substack.com/p/democrats-lose-ground-2030-apportionment-census))
+- County map: [us-atlas](https://github.com/topojson/us-atlas) counties (Census Bureau boundaries, simplified); county results from tonmcg (2024)
+- Primary polls: RealClearPolling averages for the 2028 Democratic and Republican nominations, late August to November 1, 2026
+- New candidates' 2026 results: Texas Senate (Houston Public Media/KUT, AP call), Minnesota governor (MultiState, AP), North Carolina Senate (WRAL), Ohio Senate special
 - National Popular Vote compact members: [National Popular Vote](https://www.nationalpopularvote.com/state-status) (18 states and DC, 222 electoral votes, 2026)
 - Election returns: [tonmcg/US_County_Level_Election_Results_08-24](https://github.com/tonmcg/US_County_Level_Election_Results_08-24), [MIT Election Data and Science Lab](https://electionlab.mit.edu/data)
 - How groups voted in 2024: [Pew Research Center validated voters](https://www.pewresearch.org/politics/2025/06/26/behind-trumps-2024-victory-a-more-racially-and-ethnically-diverse-voter-coalition/), AP VoteCast, national exit polls
