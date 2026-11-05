@@ -77,8 +77,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
 
     // parties
     static final int DEM = 0, REP = 1, GRN = 2, LBT = 3, FWD = 4, AMP = 5, IND = 6;
-    static final String[] PARTY = {"Democratic", "Republican", "Green", "Libertarian", "Forward", "America Party", "Independent"};
-    static final String[] PARTY_SHORT = {"D", "R", "G", "L", "F", "A", "I"};
+    static final String[] PARTY = {"Democratic", "Republican", "Green", "Libertarian", "Forward", "America Party", "Independent", "Your party"};
+    static final String[] PARTY_SHORT = {"D", "R", "G", "L", "F", "A", "I", "U"};
     static final Color C_IND = new Color(0xf5, 0x9e, 0x0b);
 
     static double clamp(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -197,6 +197,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             case LBT: return rgb(0xf5c542);
             case FWD: return rgb(0x8b5cf6);
             case IND: return C_IND;
+            case CUS: return rgb(0xec4899);
             default: return rgb(0x22c3d6);
         }
     }
@@ -463,7 +464,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
      *  plus hand-assembled religion, union, veteran, gun and LGBTQ estimates (PRRI, BLS, VA, RAND, Gallup). */
     static final class StateDef {
         final String ab, name, region;
-        final int ev;
+        int ev;                                     // electoral votes (the 2030 what-if map changes them)
         final double d24, r24, t24, d20, r20, t20, d16, r16, t16, m22;
         final double white, black, hisp, other, asian, nativeAm, u29, o65, nocol, nocolW, rural, income, cvap;
         final double wev, wca, jew, lds, arab, cuban, pr, union, vet, gun, lgbt, urban, close;
@@ -1882,6 +1883,20 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         int staffPolling = 1;                           // 0 light, 1 standard, 2 heavy
         boolean tutorial, tourDone;                     // the optional tutorial: on/off, and whether the headquarters tour has been taken
         List<String> tipsSeen = new ArrayList<String>();   // first-time tips already shown
+        // custom conditions (see Custom)
+        boolean condOn;                                 // custom national conditions replace the scenario's starting point
+        double cApproval = 37, cUnemp = 4.6, cInflation = 2.9, cGdp = 1.6, cRight = 20;
+        double[] turnAdj = new double[Custom.TURN_GROUPS.length];   // turnout change by group (-0.3 to +0.3)
+        double[] swing = new double[Custom.SWING_GROUPS.length];    // vote swing by group (points of margin, + toward the Democrats)
+        int pollErr = 1, pollLean;                      // polling error: none, normal, large, huge; direction: either, overstate D, overstate R
+        boolean npvc, map2030;                          // National Popular Vote compact in force; the projected 2030 census map
+        int leanPreset;                                 // state-lean preset
+        boolean[] evCat = {true, true, true, true, true, true, true};   // event categories on or off
+        int turnWeeks = 1;                              // weeks per turn: 1, 2 or 4
+        boolean myParty;                                // a third party of the player's design joins the general election
+        String myPartyName = "Unity Party", myPartyCand = "Jordan Reyes";
+        int myPartyFaction = F_FWD, myPartyHome = stateIdx("OH"), myPartyLook;
+        double myPartyStrength = 0.45;
 
         String lockOf(int party) { return party == DEM ? lockD : party == REP ? lockR : null; }
     }
@@ -2139,6 +2154,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         transient boolean dirty = true;
         int lastEvent = -10, pendingState = -1;
         boolean spectator;                              // the player's campaign is over; the race plays on
+        double dApp, dUnemp, dInfl, dGdp, dRight;       // custom conditions: offsets from the scenario's path
+        double[][] cellAdj, turnAdj;                    // custom conditions: logit shifts and turnout multipliers per state and cell
 
         double turnoutMood() { return mood; }
 
@@ -2163,6 +2180,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             Camp best = null;
             for (Camp k : camps) if (k.active && k.party == IND) return k;
             for (Camp k : camps) if (k.active && k.party == AMP) best = k;
+            if (best == null) for (Camp k : camps) if (k.active && k.party == CUS) best = k;
             return best;
         }
 
@@ -2633,12 +2651,13 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         static double cellLogit(Game g, Camp d, Camp r, int s, int c) {
             double e = Elect.elast[s][c];
             double l = Elect.baseL[s][c] + Elect.swing2026(c) + e * g.env / 50.0;
+            if (g.cellAdj != null) l += g.cellAdj[s][c];
             double cand = (d != null ? candTerm(g, d, s, c) : 0) - (r != null ? candTerm(g, r, s, c) : 0);
             double camp = campTerm(d, s, c) - campTerm(r, s, c);
             return l + e * (cand + camp);
         }
 
-        static final double[] THIRD_BASE = {0, 0, 0.011, 0.012, 0.009, 0.15, 0.05};
+        static final double[] THIRD_BASE = {0, 0, 0.011, 0.012, 0.009, 0.15, 0.05, 0.01};
 
         /**
          * A serious independent's share of a cell: issue fit against the nearer major candidate, the candidate and the
@@ -2688,7 +2707,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         /** Turnout of a cell given the D-vs-R preference p and the independent's share (the field programs and enthusiasm matter). */
         static double turnout(Game g, Camp d, Camp r, Camp ind, int s, int c, double p, double indSh) {
             double enD = d != null ? d.enthusiasm : 0.5, enR = r != null ? r.enthusiasm : 0.5;
-            double turn = Elect.turnB[s][c] * (1 + 0.16 * (enD - 0.5) * 2 * p + 0.16 * (enR - 0.5) * 2 * (1 - p));
+            double turn = Elect.turnB[s][c] * (g.turnAdj != null ? g.turnAdj[s][c] : 1) * (1 + 0.16 * (enD - 0.5) * 2 * p + 0.16 * (enR - 0.5) * 2 * (1 - p));
             if (d != null) turn += Week.gotvSat(d.gotv[s]) * p * (1 - turn);
             if (r != null) turn += Week.gotvSat(r.gotv[s]) * (1 - p) * (1 - turn);
             if (ind != null && indSh > 0) turn += Week.gotvSat(ind.gotv[s]) * indSh * (1 - turn) + 0.15 * indSh * (ind.enthusiasm - 0.4) * (1 - turn);
@@ -2746,14 +2765,17 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         /** Electoral votes from per-state margins (including the ME and NE districts). Returns {D, R}. */
         static int[] electoral(double[] m, int[] cdWin) {
             int d = 0, r = 0;
+            int nat = Custom.npvc ? Custom.natWinner(m) : -1;
             for (int s = 0; s < NS; s++) {
                 int ev = STATES[s].ev;
+                if (nat >= 0 && Custom.npvMember(s)) { if (nat == DEM) d += ev; else r += ev; continue; }
                 boolean split = STATES[s].ab.equals("ME") || STATES[s].ab.equals("NE");
                 if (split) ev = 2;
                 if (m[s] > 0) d += ev; else r += ev;
             }
             for (int k = 0; k < CD_DATA.length; k++) {
                 int s = (int) CD_DATA[k][0];
+                if (nat >= 0 && Custom.npvMember(s)) { if (cdWin != null) cdWin[k] = nat; continue; }
                 StateDef st = STATES[s];
                 double stateM24 = (st.d24 - st.r24) / st.t24 * 100;
                 double cm = m[s] + (CD_DATA[k][2] - stateM24);
@@ -2770,10 +2792,12 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
          */
         static int[] electoral3(double[][] rows, int ind, int[] cdWin) {
             int d = 0, r = 0, in = 0;
+            int nat = Custom.npvc ? Custom.natWinner(rows, ind) : -1;
             for (int s = 0; s < NS; s++) {
                 double[] row = rows[s];
                 double vi = ind < row.length ? row[ind] : 0;
                 int ev = STATES[s].ev;
+                if (nat >= 0 && Custom.npvMember(s)) { if (nat == DEM) d += ev; else if (nat == REP) r += ev; else in += ev; continue; }
                 boolean split = STATES[s].ab.equals("ME") || STATES[s].ab.equals("NE");
                 if (split) ev = 2;
                 int w = winner(row[0], row[1], vi);
@@ -2781,6 +2805,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             }
             for (int k = 0; k < CD_DATA.length; k++) {
                 int s = (int) CD_DATA[k][0];
+                if (nat >= 0 && Custom.npvMember(s)) { if (cdWin != null) cdWin[k] = nat; continue; }
                 double[] row = rows[s];
                 double tot = Math.max(1, row[0] + row[1] + row[2]);
                 StateDef st = STATES[s];
@@ -2965,12 +2990,14 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
     static final class Setup {
         static Game newGame(Settings set) {
             Elect.init();
+            Custom.applyStatic(set);
             Game g = new Game();
             g.set = set;
             g.rng = new Random(set.seed);
             double[] st = SCEN_START[set.scenario];
             g.env = st[0];
             g.approval = st[1]; g.unemp = st[2]; g.inflation = st[3]; g.gdp = st[4];
+            Custom.start(g);
             g.houseD = set.midHouseD; g.senateD = set.midSenateD; g.demHouse = set.midHouseD >= 218;
             for (int i = 0; i < NI; i++) g.salience[i] = 1;
             scenarioSalience(g);
@@ -2979,6 +3006,8 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             for (int s = 0; s < NS; s++) g.stateErr[s] = g.rng.nextGaussian() * 1.6;
             for (int i = 0; i < g.houseEffect.length; i++) g.houseEffect[i] = g.rng.nextGaussian() * 1.6;
             for (int s = 0; s < NS; s++) g.senateNoise[s] = g.rng.nextGaussian() * 3.0;
+            Custom.pollError(g);
+            Custom.tables(g);
             if (set.scenario == SC_WAR) g.warStart = 22;
             g.week = set.mode == MODE_FULL ? 0 : GENERAL_START_WEEK;
             Cand mine = set.custom != null ? set.custom : candById(set.candId);
@@ -3139,6 +3168,15 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 k.nominee = true; k.announced = true;
                 k.enthusiasm = 0.5;
                 if (k.party == AMP) { k.cash = 250e6; k.momentum = g.set.scenario == SC_THIRD ? 0.25 : 0; }
+            }
+            if (g.set.myParty) {
+                boolean exists = false;
+                for (Camp k : g.camps) if (k.party == CUS) exists = true;
+                if (!exists) {
+                    Camp k = addCamp(g, Custom.myCand(g.set), false);
+                    k.nominee = true; k.announced = true;
+                    k.enthusiasm = 0.5;
+                }
             }
         }
 
@@ -3546,7 +3584,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             // gaffes
             if (risk > 0) {
                 double p = 0.0035 * risk * (1 + (100 - k.a(A_DIS)) / 35.0) * (k.stamina < 40 ? 1.8 : 1.0) * g.set.eventRate * (k.nominee || k.human ? 1.0 : 0.6);
-                if (g.rng.nextDouble() < p) Events.gaffe(g, k, a, s);
+                if (g.rng.nextDouble() < p && Custom.evOn(g, Custom.EC_CAND)) Events.gaffe(g, k, a, s);
             }
         }
 
@@ -3816,6 +3854,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         static void environment(Game g) {
             double fund = -0.30 * (g.approval - 45) - 0.5 * (g.gdp - 2) + 0.7 * (g.unemp - 4.5) + 0.4 * (g.inflation - 2.5);
             fund += 0.06 * (g.set.midGeneric - 2);
+            fund -= 0.12 * g.dRight;                        // a custom right-track mood beyond what approval and the economy imply
             if (g.set.scenario == SC_WAR && g.warStart >= 0 && g.week >= g.warStart) {
                 double w = g.week - g.warStart;
                 fund += w < 6 ? -2.5 * (1 - w / 6.0) : Math.min(3.0, (w - 6) * 0.12);
@@ -3835,6 +3874,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             }
             if (g.set.scenario == SC_AIREC) targetApp = Math.max(33, 37 - g.week * 0.02);
             if (g.set.scenario == SC_BOOM) targetApp = Math.min(51, 48 + g.week * 0.02);
+            targetApp += g.dApp;
             double F = Week.F, sf = Math.sqrt(F);
             g.approval += (targetApp - g.approval) * 0.08 * F + r.nextGaussian() * 0.55 * sf;
             g.approval = clamp(g.approval, 22, 62);
@@ -3870,6 +3910,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 case SC_SCANDAL: tu = 4.8; ti = 3.0; tg = 1.2; break;
                 default: tu = 4.6 + 0.1 * Math.sin(g.week / 13.0); ti = 2.8; tg = 1.7; break;
             }
+            tu += g.dUnemp; ti += g.dInfl; tg += g.dGdp;
             double ou = g.unemp;
             g.unemp = clamp(g.unemp + (tu - g.unemp) * 0.18 + r.nextGaussian() * 0.08, 2.8, 11);
             g.inflation = clamp(g.inflation + (ti - g.inflation) * 0.15 + r.nextGaussian() * 0.12, 0, 9);
@@ -4221,8 +4262,10 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             w[EV_ADMIN] = sc == SC_SCANDAL ? 3.0 : 0.6;
             w[EV_CRIME] = 0.7;
             w[EV_HEALTH] = month == 10 ? 1.5 : 0.5;
+            for (int i = 0; i < NEV; i++) if (!Custom.evOn(g, Custom.category(i))) w[i] = 0;
             double t = 0;
             for (double v : w) t += v;
+            if (t <= 0) return -1;
             double x = r.nextDouble() * t;
             for (int i = 0; i < NEV; i++) { x -= w[i]; if (x <= 0) return i; }
             return -1;
@@ -4447,9 +4490,9 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 if (!Week.contestant(g, k) || k.party >= GRN && k.party != IND) continue;
                 double exposure = k.nominee ? 2.0 : g.primaryPoll != null && k.idx < g.primaryPoll.length && g.primaryPoll[k.idx] > 0.15 ? 1.5 : 0.8;
                 double p = k.a(A_SCA) / 100.0 * 0.0075 * exposure * g.set.eventRate * (1 + k.oppoOnOpponent) * Week.F;
-                if (r.nextDouble() < p) scandal(g, k);
+                if (r.nextDouble() < p && Custom.evOn(g, Custom.EC_CAND)) scandal(g, k);
                 int age = 2028 - k.c.born;
-                if (age >= 69 && r.nextDouble() < 0.0025 * (age - 66) * g.set.eventRate * Week.F) {
+                if (age >= 69 && r.nextDouble() < 0.0025 * (age - 66) * g.set.eventRate * Week.F && Custom.evOn(g, Custom.EC_CAND)) {
                     g.log(k.human ? NK_BAD : NK_INFO, "HEALTH: " + k.name() + " is briefly hospitalised; questions about age and fitness follow.");
                     k.favor -= 0.01; k.attackStick[9] += 0.15;
                     if (k.human) ask(g, EV_HEALTHSCARE, "A health scare", "Your candidate was briefly hospitalised. How much do you disclose?",
@@ -7000,7 +7043,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
     //  20.  USER INTERFACE: window, input, widgets
     // =====================================================================
     static final int SC_HOME = 0, SC_SETUP = 1, SC_PICK = 2, SC_CREATE = 3, SC_HQ = 4, SC_DEBATE = 5, SC_NIGHT = 6,
-            SC_END = 7, SC_BRIEF = 8, SC_VP = 9, SC_NEGOT = 10, SC_PLATFORM = 11, SC_FIELD = 12, SC_LOADING = 13, SC_RESULTS = 14;
+            SC_END = 7, SC_BRIEF = 8, SC_VP = 9, SC_NEGOT = 10, SC_PLATFORM = 11, SC_FIELD = 12, SC_LOADING = 13, SC_RESULTS = 14, SC_CUSTOM = 15;
 
     static final String SANS = pickFont(new String[]{"Inter", "Segoe UI", "Helvetica Neue", "SF Pro Text", "Roboto", "Noto Sans",
             "Open Sans", "Lato", "DejaVu Sans", "Liberation Sans", "Arial"}, "SansSerif");
@@ -7229,6 +7272,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 case SC_FIELD: FieldScreen.draw(this, g); break;
                 case SC_LOADING: Loading.draw(this, g); break;
                 case SC_RESULTS: Results.draw(this, g); break;
+                case SC_CUSTOM: Custom.draw(this, g); break;
                 default: break;
             }
         } catch (RuntimeException ex) {
@@ -9068,6 +9112,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         static void back(Battleground2028 u) {
             switch (u.screen) {
                 case SC_SETUP: u.go(SC_HOME); break;
+                case SC_CUSTOM: u.go(SC_SETUP); break;
                 case SC_PICK: u.go(SC_SETUP); break;
                 case SC_CREATE: u.go(SC_PICK); break;
                 case SC_PLATFORM: u.go(PlatformEd.returnTo); break;
@@ -9277,6 +9322,9 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             }
             // footer
             u.button(g, 48, 832, 150, 44, "Back", B_GHOST, () -> u.go(SC_HOME));
+            int nc = Custom.changes(s);
+            u.button(g, 538, 832, 300, 44, nc == 0 ? "Custom conditions..." : "Custom conditions (" + nc + (nc == 1 ? " change)" : " changes)"), nc == 0 ? B_NORM : B_PRIMARY, () -> u.go(SC_CUSTOM),
+                    "Optional: set the national mood, turnout and swings by group, polling error, the Electoral College rules, state leans, events, turn length and a third party of your own.");
             u.button(g, DW - 48 - 300, 832, 300, 44, "Choose your candidate", B_GOLD, () -> { pickSel = -1; u.go(SC_PICK); });
         }
 
@@ -10220,6 +10268,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 if (resolveT > 0.45) { resolving = false; doResolve(u); }
                 return;
             }
+            if (skip > 0 && g.daily()) skip = 0;
             if (skip > 0 && u.modal == null && u.popup == null && g.pending.isEmpty() && u.screen == SC_HQ) {
                 Camp me = g.me();
                 if (me != null) Staff.fill(g, me);
@@ -10303,7 +10352,9 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             double bx = DW - 16;
             boolean busy = resolving || u.modal != null;
             bx -= 160;
-            u.button(g, bx, 9, 160, 40, resolving ? "Working..." : game.daily() ? "END DAY  >" : "END WEEK  >", busy ? B_OFF : B_GOLD, busy ? null : () -> endWeek(u), game.daily() ? "Resolve the day (Space)." : "Resolve the week (Space).");
+            int tw = Custom.turnWeeks(game.set);
+            u.button(g, bx, 9, 160, 40, resolving ? "Working..." : game.daily() ? "END DAY  >" : tw > 1 ? "END " + tw + " WKS  >" : "END WEEK  >", busy ? B_OFF : B_GOLD, busy ? null : () -> startTurn(u),
+                    game.daily() ? "Resolve the day (Space)." : tw > 1 ? "Resolve the next " + tw + " weeks (Space). Your staff fills the schedule after the first week; the turn stops early for any decision." : "Resolve the week (Space).");
             if (game.phase == PH_INVISIBLE && game.week < 50) {
                 bx -= 70;
                 u.button(g, bx, 9, 64, 40, "+4 wks", busy ? B_OFF : B_NORM, busy ? null : () -> { skip = 3; endWeek(u); }, "Fast-forward four weeks. Your staff fills the schedule; you keep your orders. Stops for any decision.");
@@ -10450,7 +10501,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 if (pickSlot >= 0) { pickSlot = -1; return; }
                 if (sel >= 0) { sel = -1; return; }
             }
-            if (k == KeyEvent.VK_SPACE && !resolving) endWeek(u);
+            if (k == KeyEvent.VK_SPACE && !resolving) startTurn(u);
             if (k >= KeyEvent.VK_1 && k <= KeyEvent.VK_7) tab = k - KeyEvent.VK_1;
         }
 
@@ -10607,6 +10658,15 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
         }
 
         // ---------------------------------------------------------------- the turn
+        /** The player ends the turn: one week, or several when the turn length is longer (not in the final daily stretch). */
+        static void startTurn(Battleground2028 u) {
+            Game g = u.game;
+            if (resolving || fastForward || g.phase == PH_OVER) return;
+            int tw = Custom.turnWeeks(g.set);
+            if (tw > 1 && !g.daily() && skip == 0) skip = tw - 1;
+            endWeek(u);
+        }
+
         static void endWeek(Battleground2028 u) {
             Game g = u.game;
             Camp me = g.me();
@@ -12332,9 +12392,10 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             cy += 18;
             String[][] rows = {{"Presidential approval", fmt1(game.approval) + "%"}, {"Unemployment", fmt1(game.unemp) + "%"}, {"Inflation", fmt1(game.inflation) + "%"},
                     {"Economic growth", fmt1(game.gdp) + "%"}, {"National environment", margin(game.env)}, {"House", game.demHouse ? "Democrats (" + (int) game.houseD + ")" : "Republicans (" + (435 - (int) game.houseD) + ")"},
-                    {"Senate", (int) game.senateD + " D - " + (100 - (int) game.senateD) + " R"}};
+                    {"Senate", (int) game.senateD + " D - " + (100 - (int) game.senateD) + " R"}, {"Right track", Math.round(Custom.rightTrack(game)) + "%"}};
             String[] tips = {"The sitting president's job approval. The party in power is judged on it.", null, null, null,
-                    "How the fundamentals - approval, the economy, the midterm signal - lean the race, before the candidates.", null, null};
+                    "How the fundamentals - approval, the economy, the midterm signal - lean the race, before the candidates.", null, null,
+                    "Share of Americans who say the country is headed in the right direction."};
             for (int i = 0; i < rows.length; i++) {
                 text(g, rows[i][0], x, cy + 15, F_XS, C_TEXT);
                 textR(g, rows[i][1], x + w, cy + 15, F_XSB, i == 4 ? (game.env >= 0 ? C_DEM_L : C_REP_L) : C_TEXT);
@@ -12760,6 +12821,16 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             callTime[s] = clock;
             int wp = win[s];
             int ev = STATES[s].ev;
+            if (Custom.npvMember(s)) {
+                int ep = Custom.natWinner(g);
+                if (ep == DEM) evD += ev; else if (ep == REP) evR += ev; else evI += ev;
+                Camp w = ep == DEM ? g.nominee(DEM) : ep == REP ? g.nominee(REP) : g.indep();
+                Camp sw = wp == DEM ? g.nominee(DEM) : wp == REP ? g.nominee(REP) : g.indep();
+                ticker.add(0, timeStr(clock) + "  " + STATES[s].name + (ep == wp ? ": " + (w != null ? w.last() : PARTY[ep]) + " wins (compact state)"
+                        : ": " + (sw != null ? sw.last() : PARTY[wp]) + " wins, but its electors go to " + (w != null ? w.last() : PARTY[ep]) + ", the national winner"));
+                if (u.tsec - lastSound > 0.25 && ev >= 6) { snd(Sfx.CALL, 0.6, ep == DEM ? 1.1 : ep == REP ? 0.9 : 1.0); lastSound = u.tsec; }
+                return;
+            }
             if (STATES[s].ab.equals("ME") || STATES[s].ab.equals("NE")) {
                 ev = 2;
                 for (int k = 0; k < CD_DATA.length; k++) if ((int) CD_DATA[k][0] == s) { if (g.cdWinner[k] == DEM) evD++; else if (g.cdWinner[k] == IND) evI++; else evR++; }
@@ -13089,11 +13160,21 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 ObjectInputStream in = new ObjectInputStream(new java.util.zip.GZIPInputStream(new FileInputStream(file(name))));
                 Game g = (Game) in.readObject();
                 in.close();
+                resume(u, g);
+            } catch (Throwable t) {
+                u.info("Could not load", "The saved game could not be read (" + t.getClass().getSimpleName() + "). It may be from an older version.");
+            }
+        }
+
+        /** Picks up a loaded game (both the desktop and the browser versions come through here). */
+        static void resume(Battleground2028 u, Game g) {
+            {
                 if (g.version < Game.VERSION) {
                     u.info("An older save", "This game was saved by an earlier version of Battleground 2028 and can't be continued in this one. Start a new campaign to try the new features.");
                     return;
                 }
                 Elect.init();
+                Custom.applyStatic(g.set);
                 g.dirty = true;
                 Polls.cacheWeek = -1;
                 u.game = g;
@@ -13107,8 +13188,6 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 u.go(SC_HQ);
                 u.toast("Welcome back. " + weekStr(g.week) + ".", C_ACCENT);
                 Hq.showPending(u);
-            } catch (Throwable t) {
-                u.info("Could not load", "The saved game could not be read (" + t.getClass().getSimpleName() + "). It may be from an older version.");
             }
         }
     }
@@ -14336,6 +14415,501 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
     }
 
     // =====================================================================
+    //  35.  CUSTOM CONDITIONS: the national mood, turnout and swings by group, polling error, the Electoral College,
+    //       the 2030 map, state-lean presets, events by category, turn length and a third party of your own
+    // =====================================================================
+    static final int CUS = 7;                              // party code of the player-designed third party
+
+    static final class Custom {
+        // ---- the national mood: approval, unemployment, inflation, growth, right track
+        static final String[] MOOD_PRESET = {"Golden age", "Steady", "Malaise", "Crisis"};
+        static final double[][] MOOD_VAL = {{54, 3.6, 1.9, 3.6, 46}, {46, 4.2, 2.4, 2.4, 36}, {38, 5.0, 3.6, 0.9, 24}, {30, 7.8, 5.5, -1.8, 14}};
+        static final String[] MOOD_TIP = {"A popular president and a booming economy: good news for the party in the White House.",
+                "Middling approval and a steady economy: the race turns on the candidates.",
+                "Sour voters, sticky prices and slow growth: the party in power is on the back foot.",
+                "Recession and a deeply unpopular president: a wave election for the out-party."};
+        static final String[] MOOD_NAME = {"Presidential approval", "Unemployment", "Inflation", "Economic growth", "Right track"};
+        static final double[] MOOD_LO = {25, 3, 0, -4, 10}, MOOD_HI = {60, 10, 8, 5, 60}, MOOD_STEP = {0.5, 0.1, 0.1, 0.1, 1};
+
+        // ---- turnout and vote swings by group (indexes into GROUP)
+        static final int[] TURN_GROUPS = {0, 1, 4, 5, 8, 9, 10, 12, 16, 22};
+        static final int[] SWING_GROUPS = {8, 9, 12, 10, 0, 1};
+
+        // ---- polling error
+        static final String[] POLL_ERR = {"None", "Normal", "Large", "Huge"};
+        static final double[] POLL_ERR_SD = {0, 2.2, 4.0, 6.0};
+        static final double[] POLL_ERR_STATE = {0.35, 1.0, 1.35, 1.7};
+        static final String[] POLL_LEAN = {"Either way", "Overstate D", "Overstate R"};
+
+        // ---- the National Popular Vote compact: members as of 2026 (18 states and DC, 222 electoral votes)
+        static final String NPV_MEMBERS = " CA CO CT DC DE HI IL ME MD MA MN NJ NM NY OR RI VT VA WA ";
+        // ---- House seats (and so electoral votes) gained or lost after the 2030 census: median of three projections
+        //      from the Census Bureau's 2025 state estimates (Cervas, the Brennan Center, the American Redistricting Project)
+        static final String EV2030 = "TX:4 FL:3 AZ:1 GA:1 ID:1 NC:1 UT:1 CA:-4 NY:-2 IL:-1 MN:-1 OR:-1 PA:-1 RI:-1 WI:-1";
+
+        // ---- state-lean presets (points of margin; positive moves the state toward the Democrats)
+        static final String[] LEAN_PRESET = {"As projected", "Sun Belt realignment", "The blue wall returns", "Hispanic realignment deepens",
+                "The diploma divide widens", "Rural revolt"};
+        static final String[] LEAN_DESC = {"Each state leans as the 2024, 2020, 2022 and 2026 results suggest.",
+                "Diverse, fast-growing Sun Belt states move toward the Democrats (AZ, GA, NC, NV, TX by 3-4 points) while the Rust Belt drifts right.",
+                "The industrial Midwest swings back to the Democrats (MI, WI, PA by 4 points, OH and IA by 3) while the Sun Belt moves right.",
+                "Hispanic voters keep moving right: states shift toward the Republicans in proportion to their Hispanic population (Texas, California and New Mexico by 10 points or more).",
+                "College-educated states move left and working-class states move right, by up to 4 or 5 points.",
+                "Rural America turns out and turns right: the most rural states shift up to 6 points toward the Republicans; the most urban move the other way."};
+        static final String SUNBELT = "AZ:4 GA:4 NC:4 NV:3 TX:4 FL:2 VA:2 CO:2 MI:-3 WI:-3 PA:-2 OH:-3 IA:-3 MN:-2 ME:-2 NH:-1";
+        static final String BLUEWALL = "MI:4 WI:4 PA:4 OH:3 IA:3 MN:2 ME:2 NH:2 AZ:-3 GA:-3 NC:-2 NV:-3 TX:-3 FL:-2";
+
+        // ---- events by category
+        static final int EC_ECON = 0, EC_CRIME = 1, EC_BORDER = 2, EC_DISASTER = 3, EC_FOREIGN = 4, EC_WH = 5, EC_CAND = 6, NEC = 7;
+        static final String[] EV_CAT = {"Economic and AI shocks", "Crime, guns and campus unrest", "The border and the Supreme Court",
+                "Disasters and public health", "Foreign crises", "White House scandals", "Candidate scandals, gaffes and health scares"};
+
+        // ---- turn length
+        static final String[] TURN_NAME = {"1 week", "2 weeks", "4 weeks"};
+        static final int[] TURN_WEEKS = {1, 2, 4};
+
+        static int[] ev0;                  // electoral votes as apportioned after the 2020 census
+        static double[] lean0;             // state leans before any preset
+        static boolean npvc;               // the compact is in force for the game being played
+        static int scrollFaction;
+
+        /** The event category of an event (or -1 for scenario events that are always on). */
+        static int category(int ev) {
+            switch (ev) {
+                case EV_AI: case EV_GRID: case EV_MARKET: case EV_SHUTDOWN: return EC_ECON;
+                case EV_SHOOTING: case EV_CAMPUS: case EV_CRIME: return EC_CRIME;
+                case EV_BORDER: case EV_SCOTUS: return EC_BORDER;
+                case EV_HURRICANE: case EV_HEALTH: return EC_DISASTER;
+                case EV_CHINA: case EV_MIDEAST: return EC_FOREIGN;
+                case EV_ADMIN: return EC_WH;
+                case EV_GAFFE: case EV_SCANDAL: case EV_HEALTHSCARE: case EV_OPPO: return EC_CAND;
+                default: return -1;
+            }
+        }
+
+        static boolean evOn(Game g, int cat) {
+            boolean[] on = g.set.evCat;
+            return on == null || cat < 0 || cat >= on.length || on[cat];
+        }
+
+        static int turnWeeks(Settings s) { return s.turnWeeks == 2 || s.turnWeeks == 4 ? s.turnWeeks : 1; }
+
+        /** Fills in settings an older save doesn't have. */
+        static void migrate(Settings s) {
+            if (s.turnAdj == null || s.turnAdj.length != TURN_GROUPS.length) s.turnAdj = new double[TURN_GROUPS.length];
+            if (s.swing == null || s.swing.length != SWING_GROUPS.length) s.swing = new double[SWING_GROUPS.length];
+            if (s.evCat == null || s.evCat.length != NEC) { s.evCat = new boolean[NEC]; Arrays.fill(s.evCat, true); }
+            if (s.turnWeeks <= 0) s.turnWeeks = 1;
+            if (s.myPartyName == null) s.myPartyName = "Unity Party";
+            if (s.myPartyCand == null) s.myPartyCand = "Jordan Reyes";
+            if (s.myPartyHome < 0 || s.myPartyHome >= NS) s.myPartyHome = stateIdx("OH");
+        }
+
+        /** Resets the shared tables to the stock map, then applies this game's rules: the 2030 map, lean presets, the compact, your party. */
+        static void applyStatic(Settings s) {
+            if (ev0 == null) { ev0 = new int[NS]; for (int i = 0; i < NS; i++) ev0[i] = STATES[i].ev; }
+            if (lean0 == null && Elect.ready) lean0 = Elect.lean.clone();
+            for (int i = 0; i < NS; i++) STATES[i].ev = ev0[i];
+            if (s != null) migrate(s);
+            if (s != null && s.map2030)
+                for (String t : EV2030.split(" ")) { String[] p = t.split(":"); int k = stateIdx(p[0]); STATES[k].ev = ev0[k] + Integer.parseInt(p[1]); }
+            if (lean0 != null) for (int i = 0; i < NS; i++) Elect.lean[i] = lean0[i] + (s == null ? 0 : leanShift(s, i));
+            npvc = s != null && s.npvc;
+            boolean mine = s != null && s.myParty;
+            PARTY[CUS] = mine ? s.myPartyName : "Your party";
+            PARTY_SHORT[CUS] = mine && s.myPartyName.trim().length() > 0 ? s.myPartyName.trim().substring(0, 1).toUpperCase() : "U";
+            Vote.THIRD_BASE[CUS] = mine ? partyBase(s.myPartyStrength) : 0.01;
+        }
+
+        /** Points of margin a lean preset moves a state (positive = toward the Democrats). */
+        static double leanShift(Settings s, int st) {
+            StateDef d = STATES[st];
+            switch (s.leanPreset) {
+                case 1: return listShift(SUNBELT, d.ab);
+                case 2: return listShift(BLUEWALL, d.ab);
+                case 3: return -0.25 * d.hisp;
+                case 4: return 0.3 * ((100 - d.nocol) - 35);
+                case 5: return -0.2 * (d.rural - 20);
+                default: return 0;
+            }
+        }
+
+        static double listShift(String list, String ab) {
+            for (String t : list.split(" ")) { String[] p = t.split(":"); if (p[0].equals(ab)) return Double.parseDouble(p[1]); }
+            return 0;
+        }
+
+        /** Right track / wrong track: follows approval and the economy (plus any custom offset). */
+        static double rightTrack(double app, double unemp, double infl, double gdp) {
+            return clamp(0.62 * app - 3 + 1.5 * (gdp - 2) - 1.2 * (unemp - 4.5) - 1.0 * (infl - 2.5), 5, 75);
+        }
+
+        static double rightTrack(Game g) { return clamp(rightTrack(g.approval, g.unemp, g.inflation, g.gdp) + g.dRight, 3, 80); }
+
+        /** Base strength of your own party from the strength setting (0-1): about 1% to 20% nationally. */
+        static double partyBase(double strength) { return 0.006 + 0.17 * Math.pow(clamp(strength, 0, 1), 1.6); }
+
+        static String strengthLabel(double strength) {
+            double v = 1 + 18 * Math.pow(clamp(strength, 0, 1), 1.6);
+            return "about " + Math.round(v) + "% nationally";
+        }
+
+        // ---------------------------------------------------------------- a new game
+        /** The custom national conditions: the starting point, and the offsets the scenario's path is shifted by. */
+        static void start(Game g) {
+            Settings s = g.set;
+            migrate(s);
+            if (!s.condOn) return;
+            double[] st = SCEN_START[s.scenario];
+            g.dApp = s.cApproval - st[1]; g.dUnemp = s.cUnemp - st[2]; g.dInfl = s.cInflation - st[3]; g.dGdp = s.cGdp - st[4];
+            g.dRight = s.cRight - rightTrack(s.cApproval, s.cUnemp, s.cInflation, s.cGdp);
+            g.approval = s.cApproval; g.unemp = s.cUnemp; g.inflation = s.cInflation; g.gdp = s.cGdp;
+        }
+
+        /** Polling error: size and direction (the random draws are made as before, so default games are unchanged). */
+        static void pollError(Game g) {
+            Settings s = g.set;
+            int m = clampi(s.pollErr, 0, 3);
+            double sd = POLL_ERR_SD[m];
+            g.natErr = g.natErr / 2.2 * sd;
+            if (s.pollLean == 1) g.natErr = Math.abs(g.natErr) + sd * 0.35;
+            else if (s.pollLean == 2) g.natErr = -Math.abs(g.natErr) - sd * 0.35;
+            for (int st = 0; st < NS; st++) g.stateErr[st] *= POLL_ERR_STATE[m];
+        }
+
+        /** Per-cell shifts for the lean preset and group swings, and turnout multipliers by group. */
+        static void tables(Game g) {
+            Settings s = g.set;
+            double[] sh = new double[NS];
+            boolean any = false, sw = false, tu = false;
+            for (int st = 0; st < NS; st++) { sh[st] = leanShift(s, st); if (sh[st] != 0) any = true; }
+            for (double v : s.swing) if (v != 0) sw = true;
+            for (double v : s.turnAdj) if (v != 0) tu = true;
+            g.cellAdj = null;
+            g.turnAdj = null;
+            if (any || sw) {
+                g.cellAdj = new double[NS][NCELL];
+                for (int st = 0; st < NS; st++)
+                    for (int c = 0; c < NCELL; c++) {
+                        double pts = sh[st];
+                        if (sw) for (int i = 0; i < SWING_GROUPS.length; i++) pts += s.swing[i] * Vote.member(SWING_GROUPS[i], st, c);
+                        // points of margin to logit, at this cell's own baseline
+                        double p = logistic(Elect.baseL[st][c] + Elect.swing2026(c));
+                        g.cellAdj[st][c] = clamp(pts / 100.0 / (2 * Math.max(0.06, p * (1 - p))), -1.6, 1.6);
+                    }
+            }
+            if (tu) {
+                g.turnAdj = new double[NS][NCELL];
+                for (int st = 0; st < NS; st++)
+                    for (int c = 0; c < NCELL; c++) {
+                        double m = 1;
+                        for (int i = 0; i < TURN_GROUPS.length; i++) m *= 1 + s.turnAdj[i] * Vote.member(TURN_GROUPS[i], st, c);
+                        g.turnAdj[st][c] = clamp(m, 0.3, 2.0);
+                    }
+            }
+        }
+
+        /** Your own third party's candidate. */
+        static Cand myCand(Settings s) {
+            migrate(s);
+            Cand t = candById(s.myPartyLook == 1 ? "amp" : "libert");
+            Cand c = new Cand();
+            c.id = "myparty";
+            String nm = s.myPartyCand.trim();
+            if (nm.isEmpty()) nm = "Jordan Reyes";
+            int sp = nm.lastIndexOf(' ');
+            c.first = sp > 0 ? nm.substring(0, sp) : nm;
+            c.last = sp > 0 ? nm.substring(sp + 1) : "";
+            if (c.last.isEmpty()) { c.last = c.first; c.first = ""; }
+            c.party = CUS;
+            c.role = s.myPartyName + " nominee (fictional)";
+            c.home = s.myPartyHome;
+            c.homeAb = STATES[c.home].ab;
+            c.born = 1974;
+            c.faction = clampi(s.myPartyFaction, 0, NF - 1);
+            double st = clamp(s.myPartyStrength, 0, 1);
+            int[] a = {66, 70, 66, 64, 72, 66, 60, 60, 55, 20, 62, 66, 66, 72, 30, 55, 45, 66, 10, 50, 60};
+            for (int i = 0; i < NA; i++) c.a[i] = a[i];
+            c.a[A_BIG] = (int) Math.round(40 + 45 * st);
+            c.a[A_SMD] = (int) Math.round(45 + 40 * st);
+            c.nameId = 0.12 + 0.45 * st;
+            c.poll = 0;
+            c.cash = (10 + 140 * st) * 1e6;
+            c.list = (0.2 + 1.5 * st) * 1e6;
+            c.econ = FACTIONS[c.faction].econ;
+            c.cult = FACTIONS[c.faction].cult;
+            c.plat = FACTIONS[c.faction].pos.clone();
+            c.look = t.look;
+            c.fictional = true;
+            c.bio = "A fictional candidate created for this game, running on the " + s.myPartyName + " line: " + FACTIONS[c.faction].desc;
+            c.pros = "A fresh face with no Washington baggage.";
+            c.cons = "No party machine, little money and the 'wasted vote' problem.";
+            return c;
+        }
+
+        // ---------------------------------------------------------------- the Electoral College
+        static boolean npvMember(int st) { return npvc && NPV_MEMBERS.contains(" " + STATES[st].ab + " "); }
+
+        /** The national popular vote winner (DEM, REP or IND) from state rows: votes, or percentages weighted by 2024 turnout. */
+        static int natWinner(double[][] rows, int ind) {
+            double d = 0, r = 0, i = 0;
+            for (int s = 0; s < NS; s++) {
+                double[] row = rows[s];
+                double tot = row[0] + row[1] + row[2];
+                double w = tot > 1000 || tot <= 0 ? 1 : STATES[s].t24 / tot;
+                d += row[0] * w; r += row[1] * w; i += (ind < row.length ? row[ind] : 0) * w;
+            }
+            return Vote.winner(d, r, i);
+        }
+
+        /** The national winner from margins alone (weighted by 2024 turnout). */
+        static int natWinner(double[] m) {
+            double v = 0;
+            for (int s = 0; s < NS; s++) v += m[s] * STATES[s].t24;
+            return v >= 0 ? DEM : REP;
+        }
+
+        static int natWinner(Game g) { return Vote.winner(g.popD, g.popR, g.popI); }
+
+        /** How many things differ from a stock game. */
+        static int changes(Settings s) {
+            migrate(s);
+            int n = 0;
+            if (s.condOn) n++;
+            for (double v : s.turnAdj) if (v != 0) { n++; break; }
+            for (double v : s.swing) if (v != 0) { n++; break; }
+            if (s.pollErr != 1 || s.pollLean != 0) n++;
+            if (s.npvc) n++;
+            if (s.map2030) n++;
+            if (s.leanPreset != 0) n++;
+            for (boolean b : s.evCat) if (!b) { n++; break; }
+            if (turnWeeks(s) != 1) n++;
+            if (s.myParty) n++;
+            return n;
+        }
+
+        static void resetAll(Settings s) {
+            s.condOn = false;
+            Arrays.fill(s.turnAdj, 0);
+            Arrays.fill(s.swing, 0);
+            s.pollErr = 1; s.pollLean = 0;
+            s.npvc = false; s.map2030 = false; s.leanPreset = 0;
+            Arrays.fill(s.evCat, true);
+            s.turnWeeks = 1;
+            s.myParty = false;
+        }
+
+        static void scenarioValues(Settings s) {
+            double[] st = SCEN_START[s.scenario];
+            s.cApproval = st[1]; s.cUnemp = st[2]; s.cInflation = st[3]; s.cGdp = st[4];
+            s.cRight = Math.round(rightTrack(st[1], st[2], st[3], st[4]));
+        }
+
+        static double moodGet(Settings s, int i) { return i == 0 ? s.cApproval : i == 1 ? s.cUnemp : i == 2 ? s.cInflation : i == 3 ? s.cGdp : s.cRight; }
+
+        static void moodSet(Settings s, int i, double v) {
+            v = Math.round(clamp(v, MOOD_LO[i], MOOD_HI[i]) / MOOD_STEP[i]) * MOOD_STEP[i];
+            if (i == 0) s.cApproval = v; else if (i == 1) s.cUnemp = v; else if (i == 2) s.cInflation = v; else if (i == 3) s.cGdp = v; else s.cRight = v;
+            s.condOn = true;
+        }
+
+        static String moodText(int i, double v) { return i == 3 ? (v >= 0 ? "+" : "") + fmt1(v) + "%" : i == 4 ? Math.round(v) + "%" : fmt1(v) + "%"; }
+
+        // ---------------------------------------------------------------- the screen
+        static void draw(Battleground2028 u, Graphics2D g) {
+            Settings s = u.setup;
+            migrate(s);
+            Screens.header(u, g, "Custom Conditions", "Set the electoral conditions outside the scenarios. Everything here is optional; the scenario still sets the story.");
+            moodPanel(u, g, s, 48, 124, 372, 400);
+            pollPanel(u, g, s, 48, 536, 372, 150);
+            turnPanel(u, g, s, 48, 698, 372, 116);
+            turnoutPanel(u, g, s, 436, 124, 372, 420);
+            swingPanel(u, g, s, 436, 556, 372, 258);
+            rulesPanel(u, g, s, 824, 124, 356, 236);
+            leanPanel(u, g, s, 824, 372, 356, 214);
+            eventsPanel(u, g, s, 824, 598, 356, 216);
+            partyPanel(u, g, s, 1196, 124, 356, 690);
+            u.button(g, 48, 832, 150, 44, "Back", B_GHOST, () -> u.go(SC_SETUP));
+            u.button(g, 214, 832, 150, 44, "Reset all", B_GHOST, () -> resetAll(s), "Put everything back to a stock game.");
+            int n = changes(s);
+            text(g, n == 0 ? "No changes: a stock game." : n + (n == 1 ? " change" : " changes") + " from a stock game.", 384, 860, F_S, n == 0 ? C_DIM : C_GOLD);
+            u.button(g, DW - 48 - 240, 832, 240, 44, "Done", B_GOLD, () -> u.go(SC_SETUP));
+        }
+
+        static void moodPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "The national mood");
+            u.button(g, x + w - 128, y + 12, 110, 22, "Scenario values", B_SUBTLE, () -> { scenarioValues(s); s.condOn = false; }, "Back to the scenario's starting point.");
+            text(g, "Custom national conditions", x + 18, y + 54, F_H3, C_TEXT);
+            u.toggle(g, x + w - 18 - 36, y + 40, s.condOn, () -> { if (!s.condOn && s.cApproval <= 0) scenarioValues(s); s.condOn = !s.condOn; },
+                    "Replace the scenario's starting approval and economy. The scenario's ups and downs still play out around your numbers.");
+            wrap(g, s.condOn ? "On: the race starts from these numbers; the scenario's story plays out around them." : "Off: the scenario sets the mood (" + SCEN_NAME[s.scenario] + ").",
+                    x + 18, y + 72, w - 36, F_XS, C_DIM);
+            double bw = (w - 36 - 9) / 4;
+            for (int i = 0; i < 4; i++) {
+                final int k = i;
+                u.button(g, x + 18 + i * (bw + 3), y + 96, bw, 28, MOOD_PRESET[i], B_NORM, () -> {
+                    for (int j = 0; j < 5; j++) moodSet(s, j, MOOD_VAL[k][j]);
+                }, MOOD_TIP[i]);
+            }
+            double ry = y + 140;
+            for (int i = 0; i < 5; i++) {
+                final int k = i;
+                double v = moodGet(s, i);
+                text(g, MOOD_NAME[i], x + 18, ry + 12, F_S, s.condOn ? C_TEXT : C_DIM);
+                textR(g, moodText(i, v), x + w - 18, ry + 12, F_SB, s.condOn ? C_GOLD : C_DIM);
+                u.slider(g, x + 18, ry + 30, w - 36, (v - MOOD_LO[i]) / (MOOD_HI[i] - MOOD_LO[i]), s.condOn ? C_ACCENT : C_FAINT,
+                        f -> moodSet(s, k, MOOD_LO[k] + f * (MOOD_HI[k] - MOOD_LO[k])), null);
+                ry += 48;
+            }
+        }
+
+        static void pollPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "Polling error");
+            u.segmented(g, x + 18, y + 40, w - 36, 28, POLL_ERR, clampi(s.pollErr, 0, 3), i -> s.pollErr = i,
+                    new String[]{"The polls are right on average (sampling noise only).", "Polls miss by about 2 points nationally, as in a typical year.",
+                            "A 2016- or 2020-sized miss is likely.", "A historic polling failure."});
+            u.segmented(g, x + 18, y + 76, w - 36, 28, POLL_LEAN, clampi(s.pollLean, 0, 2), i -> s.pollLean = i,
+                    new String[]{"The miss could go either way.", "Polls show Democrats doing better than they really are.", "Polls show Republicans doing better than they really are."});
+            String[] d = {"You'll only see sampling noise.", "The polls will be off by a couple of points, one way or the other.", "Expect a 2016- or 2020-sized miss.", "Expect a historic miss."};
+            wrap(g, d[clampi(s.pollErr, 0, 3)] + (s.pollErr > 0 && s.pollLean == 1 ? " The polls will flatter the Democrats." : s.pollErr > 0 && s.pollLean == 2 ? " The polls will flatter the Republicans." : ""),
+                    x + 18, y + 124, w - 36, F_XS, C_DIM);
+        }
+
+        static void turnPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "Turn length");
+            int cur = turnWeeks(s) == 4 ? 2 : turnWeeks(s) == 2 ? 1 : 0;
+            u.segmented(g, x + 18, y + 40, w - 36, 28, TURN_NAME, cur, i -> s.turnWeeks = TURN_WEEKS[i], null);
+            wrap(g, cur == 0 ? "One week per turn (one day in the final two weeks)." : "Each turn covers " + TURN_NAME[cur] + ": your staff fills the schedule after the first week. Turns stop early for decisions, debates and primaries, and the final two weeks are still played day by day.",
+                    x + 18, y + 84, w - 36, F_XS, C_DIM);
+        }
+
+        static void turnoutPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "Turnout by group");
+            u.button(g, x + w - 88, y + 12, 70, 22, "Reset", B_SUBTLE, () -> Arrays.fill(s.turnAdj, 0));
+            wrap(g, "Raise or lower turnout among a group, relative to the model's projection.", x + 18, y + 48, w - 36, F_XS, C_DIM);
+            double ry = y + 70;
+            for (int i = 0; i < TURN_GROUPS.length; i++) {
+                final int k = i;
+                double v = s.turnAdj[i];
+                text(g, GROUP[TURN_GROUPS[i]], x + 18, ry + 16, F_S, v != 0 ? C_TEXT : C_DIM);
+                u.slider(g, x + 168, ry + 12, w - 168 - 72, (v + 0.3) / 0.6, v > 0 ? C_GOOD : v < 0 ? C_BAD : C_FAINT,
+                        f -> s.turnAdj[k] = Math.round((f * 0.6 - 0.3) * 20) / 20.0, null, false);
+                textR(g, v == 0 ? "-" : (v > 0 ? "+" : "") + Math.round(v * 100) + "%", x + w - 18, ry + 16, F_SB, v != 0 ? C_GOLD : C_DIM);
+                ry += 34;
+            }
+        }
+
+        static void swingPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "Vote swing by group");
+            u.button(g, x + w - 88, y + 12, 70, 22, "Reset", B_SUBTLE, () -> Arrays.fill(s.swing, 0));
+            wrap(g, "Move a group toward either party, in points of margin.", x + 18, y + 48, w - 36, F_XS, C_DIM);
+            double ry = y + 68;
+            for (int i = 0; i < SWING_GROUPS.length; i++) {
+                final int k = i;
+                double v = s.swing[i];
+                text(g, GROUP[SWING_GROUPS[i]], x + 18, ry + 16, F_S, v != 0 ? C_TEXT : C_DIM);
+                u.slider(g, x + 168, ry + 12, w - 168 - 72, (v + 15) / 30.0, v > 0 ? C_DEM : v < 0 ? C_REP : C_FAINT,
+                        f -> s.swing[k] = Math.round(f * 30 - 15), null, false);
+                textR(g, v == 0 ? "-" : margin(v), x + w - 18, ry + 16, F_SB, v > 0 ? C_DEM_L : v < 0 ? C_REP_L : C_DIM);
+                ry += 31;
+            }
+        }
+
+        static void rulesPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "The Electoral College");
+            u.toggle(g, x + 18, y + 40, s.npvc, () -> s.npvc = !s.npvc, null);
+            text(g, "National Popular Vote compact in force", x + 64, y + 55, F_SB, s.npvc ? C_TEXT : C_DIM);
+            wrap(g, "What-if: the compact takes effect. Its 18 member states and DC (222 electoral votes in 2026) give their electors to the national popular vote winner.",
+                    x + 18, y + 78, w - 36, F_XS, C_DIM);
+            u.toggle(g, x + 18, y + 132, s.map2030, () -> s.map2030 = !s.map2030, null);
+            text(g, "Projected 2030 census map", x + 64, y + 147, F_SB, s.map2030 ? C_TEXT : C_DIM);
+            wrap(g, "What-if: electoral votes reapportioned early. Texas +4, Florida +3, Arizona, Georgia, Idaho, North Carolina and Utah +1; California -4, New York -2, and Illinois, Minnesota, Oregon, Pennsylvania, Rhode Island and Wisconsin -1.",
+                    x + 18, y + 170, w - 36, F_XS, C_DIM);
+        }
+
+        static void leanPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "State-lean presets");
+            double ry = y + 38;
+            for (int i = 0; i < LEAN_PRESET.length; i++) {
+                final int k = i;
+                boolean on = s.leanPreset == i;
+                boolean hov = u.hover(x + 12, ry, w - 24, 22);
+                if (on || hov) {
+                    g.setColor(on ? new Color(47, 111, 224, 70) : new Color(255, 255, 255, 14));
+                    g.fill(new RoundRectangle2D.Double(x + 12, ry, w - 24, 22, 8, 8));
+                }
+                g.setColor(on ? C_GOLD : C_FAINT);
+                g.fill(new Ellipse2D.Double(x + 20, ry + 7, 8, 8));
+                text(g, LEAN_PRESET[i], x + 36, ry + 15, F_S, on ? Color.white : C_TEXT);
+                u.hit(x + 12, ry, w - 24, 22, () -> s.leanPreset = k, LEAN_DESC[i]);
+                ry += 23;
+            }
+            wrap(g, LEAN_DESC[clampi(s.leanPreset, 0, LEAN_PRESET.length - 1)], x + 18, ry + 14, w - 36, F_XS, C_DIM);
+        }
+
+        static void eventsPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "Events");
+            double ry = y + 38;
+            for (int i = 0; i < NEC; i++) {
+                final int k = i;
+                u.toggle(g, x + 18, ry, s.evCat[i], () -> s.evCat[k] = !s.evCat[k], null);
+                text(g, EV_CAT[i], x + 64, ry + 15, F_S, s.evCat[i] ? C_TEXT : C_DIM);
+                ry += 24;
+            }
+        }
+
+        static void partyPanel(Battleground2028 u, Graphics2D g, Settings s, double x, double y, double w, double h) {
+            u.panel(g, x, y, w, h, "Your own third party");
+            text(g, "Run a third party of your own", x + 18, y + 54, F_H3, C_TEXT);
+            u.toggle(g, x + w - 18 - 36, y + 40, s.myParty, () -> s.myParty = !s.myParty, "Adds your party's ticket to the general election. You still play your own campaign.");
+            wrap(g, "A computer-run third party joins the general election alongside the parties you switched on. You still play your own campaign.",
+                    x + 18, y + 74, w - 36, F_XS, C_DIM);
+            Color tc = s.myParty ? C_TEXT : C_DIM;
+            double ry = y + 116;
+            text(g, "Party name", x + 18, ry + 14, F_S, tc);
+            u.textField(g, "myPartyName", x + 120, ry, w - 138, 28, s.myPartyName, v -> { if (v.trim().length() > 0) s.myPartyName = v.trim().length() > 28 ? v.trim().substring(0, 28) : v.trim(); });
+            ry += 40;
+            text(g, "Candidate", x + 18, ry + 14, F_S, tc);
+            u.textField(g, "myPartyCand", x + 120, ry, w - 138, 28, s.myPartyCand, v -> { if (v.trim().length() > 0) s.myPartyCand = v.trim().length() > 30 ? v.trim().substring(0, 30) : v.trim(); });
+            ry += 40;
+            text(g, "Ideology", x + 18, ry + 14, F_S, tc);
+            Faction f = FACTIONS[clampi(s.myPartyFaction, 0, NF - 1)];
+            u.button(g, x + 120, ry, w - 138, 28, f.name, B_NORM, () -> {
+                String[] names = new String[NF];
+                for (int i = 0; i < NF; i++) names[i] = FACTIONS[i].name;
+                Popup p = u.openPopup(x + 120, y + 260, 240, "Choose an ideology", names, i -> s.myPartyFaction = i);
+                p.y = 140;
+            }, "Your party's platform: it takes this faction's positions on all 18 issues.");
+            ry += 36;
+            double fh = wrap(g, f.desc, x + 18, ry + 10, w - 36, F_XS, C_DIM);
+            ry += Math.max(44, fh + 8);
+            text(g, "Home state", x + 18, ry + 14, F_S, tc);
+            u.button(g, x + 120, ry, w - 138, 28, STATES[s.myPartyHome].name, B_NORM, () -> {
+                String[] names = new String[NS];
+                for (int i = 0; i < NS; i++) names[i] = STATES[i].name;
+                Popup p = u.openPopup(x + 120, y + 340, 200, "Home state", names, i -> s.myPartyHome = i);
+                p.y = 120;
+            }, "Candidates run strongest at home.");
+            ry += 44;
+            text(g, "Strength", x + 18, ry + 12, F_S, tc);
+            textR(g, strengthLabel(s.myPartyStrength), x + w - 18, ry + 12, F_SB, s.myParty ? C_GOLD : C_DIM);
+            u.slider(g, x + 18, ry + 30, w - 36, s.myPartyStrength, s.myParty ? partyColor(CUS) : C_FAINT, v -> s.myPartyStrength = Math.round(v * 20) / 20.0,
+                    "How strong your party starts: money, name recognition and voters open to it. Above about 15% in the polls it makes the debates.");
+            ry += 48;
+            text(g, "Candidate's look", x + 18, ry + 14, F_S, tc);
+            u.segmented(g, x + 140, ry, w - 158, 26, new String[]{"Woman", "Man"}, s.myPartyLook == 1 ? 1 : 0, i -> s.myPartyLook = i, null);
+            ry += 40;
+            Cand c = myCand(s);
+            Portrait.draw(g, c, x + 18, ry, 120, 144, u.tsec, 0.3, false, true);
+            text(g, c.name(), x + 152, ry + 22, F_BB, Color.white);
+            chip(g, s.myPartyName, x + 152, ry + 34, partyLight(CUS), false);
+            textFit(g, "Home: " + STATES[c.home].name, x + 152, ry + 74, w - 170, F_XS, C_DIM);
+            textFit(g, f.name, x + 152, ry + 92, w - 170, F_XS, C_DIM);
+            wrap(g, "Strong parties can carry states and make the debates (15% in the polls); weak ones play spoiler.", x + 18, y + h - 38, w - 36, F_XS, C_FAINT);
+        }
+    }
+
+    // =====================================================================
     //  MAIN
     // =====================================================================
     public static void main(String[] args) {
@@ -14369,6 +14943,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
                 String cand = a.length > 3 ? a[3] : "shapiro";
                 int scen = a.length > 4 ? Integer.parseInt(a[4]) : SC_BASE;
                 aiOnly = a.length > 5 && a[5].contains("ai");
+                customSpec = a.length > 6 ? a[6] : null;
                 primOnly = a.length > 5 && a[5].contains("p");
                 for (int r = 0; r < runs; r++) game(1000 + r, mode, cand, scen, a.length > 5 && a[5].contains("v"));
             }
@@ -14711,6 +15286,27 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             return c;
         }
 
+        static String customSpec;
+
+        /** Test hook for custom conditions: "npvc,map2030,lean=3,swing=2:8,turn=0:0.2,poll=3:1,party=0.6,mood=3,weeks=2,ev=6". */
+        static void customize(Settings s, String spec) {
+            Custom.migrate(s);
+            for (String t : spec.split(",")) {
+                String[] kv = t.split("=");
+                String k = kv[0], v = kv.length > 1 ? kv[1] : "";
+                if (k.equals("npvc")) s.npvc = true;
+                if (k.equals("map2030")) s.map2030 = true;
+                if (k.equals("lean")) s.leanPreset = Integer.parseInt(v);
+                if (k.equals("swing")) { String[] p = v.split(":"); s.swing[Integer.parseInt(p[0])] = Double.parseDouble(p[1]); }
+                if (k.equals("turn")) { String[] p = v.split(":"); s.turnAdj[Integer.parseInt(p[0])] = Double.parseDouble(p[1]); }
+                if (k.equals("poll")) { String[] p = v.split(":"); s.pollErr = Integer.parseInt(p[0]); s.pollLean = Integer.parseInt(p[1]); }
+                if (k.equals("party")) { s.myParty = true; s.myPartyStrength = Double.parseDouble(v); }
+                if (k.equals("mood")) { int i = Integer.parseInt(v); for (int j = 0; j < 5; j++) Custom.moodSet(s, j, Custom.MOOD_VAL[i][j]); }
+                if (k.equals("weeks")) s.turnWeeks = Integer.parseInt(v);
+                if (k.equals("ev")) s.evCat[Integer.parseInt(v)] = false;
+            }
+        }
+
         static void game(long seed, int mode, String cand, int scen, boolean verbose) {
             long t0 = System.currentTimeMillis();
             Settings set = new Settings();
@@ -14719,6 +15315,7 @@ public class Battleground2028 extends JPanel implements ActionListener, MouseLis
             if (ind) set.custom = testIndependent();
             set.party = ind ? IND : candById(cand).party;
             Arrays.fill(set.staff, true);
+            if (customSpec != null) customize(set, customSpec);
             Game g = Setup.newGame(set);
             if (ind && mode == MODE_FULL) Setup.prestart(g);
             if (aiOnly) { for (Camp k : g.camps) k.human = false; g.player = -1; }

@@ -27,6 +27,20 @@ New to the game? Choose **Tutorial: Learn to Play** on the main menu (in the bro
 
 The window scales to your screen. The game autosaves every week to a `.battleground2028` folder in your home directory, and **Continue** on the main menu picks up where you left off. Press **F1** in the game for the full briefing.
 
+## What's new in version 3
+
+- **Custom conditions.** On the New Campaign screen, **Custom conditions** lets you go beyond the scenarios:
+  - set the national mood yourself (presidential approval, unemployment, inflation, growth and right track), or pick Golden age, Steady, Malaise or Crisis
+  - raise or lower turnout for ten groups, and swing the six biggest groups toward either party
+  - choose how big the polling error is, and which way it leans
+  - switch on the National Popular Vote compact (its 18 states and DC give their electors to the national winner) or the projected 2030 census map
+  - apply a state-lean preset: Sun Belt realignment, the blue wall returns, Hispanic realignment deepens, the diploma divide widens, or rural revolt
+  - turn event categories on or off
+  - play turns of one, two or four weeks
+  - add a third party of your own design: name, candidate, ideology, home state and strength
+- **The 2026 midterm results** feed the model: each state's Senate and governor margins, about 255 Democratic House seats, 54 Democratic senators and a D+13 national House vote.
+- The browser version is now generated from the Java source, so the two always play the same game.
+
 ## What's new in version 2
 
 - **Shape the field.** Before a full campaign, keep any candidate out of either primary and, if you like, lock in the other party's nominee.
@@ -95,6 +109,8 @@ Each state's electorate is modelled as 96 cells: 16 religious, racial and educat
 
 ## Sources
 
+- Projected 2030 apportionment: median of the Cervas, Brennan Center and American Redistricting Project projections from the Census Bureau's 2025 estimates ([Decision Desk HQ, February 2026](https://decisiondeskhq.substack.com/p/democrats-lose-ground-2030-apportionment-census))
+- National Popular Vote compact members: [National Popular Vote](https://www.nationalpopularvote.com/state-status) (18 states and DC, 222 electoral votes, 2026)
 - Election returns: [tonmcg/US_County_Level_Election_Results_08-24](https://github.com/tonmcg/US_County_Level_Election_Results_08-24), [MIT Election Data and Science Lab](https://electionlab.mit.edu/data)
 - How groups voted in 2024: [Pew Research Center validated voters](https://www.pewresearch.org/politics/2025/06/26/behind-trumps-2024-victory-a-more-racially-and-ethnically-diverse-voter-coalition/), AP VoteCast, national exit polls
 - The 2026 environment: [Silver Bulletin generic ballot](https://www.natesilver.net/p/generic-ballot-average-2026-nate-silver-bulletin-congress-polls) and [presidential approval](https://www.natesilver.net/p/trump-approval-ratings-nate-silver-bulletin) averages (October 2026)
